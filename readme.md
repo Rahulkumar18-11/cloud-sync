@@ -190,3 +190,7 @@ GCP_CREDENTIALS=
 ## License
 
 This project is developed for academic purposes.
+
+## Contributors
+
+- Anshu
