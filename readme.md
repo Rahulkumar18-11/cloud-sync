@@ -185,12 +185,10 @@ GCP_CREDENTIALS=
 - 25MCC20050
 - 25MCC20051
 - 25MCC20023
+- Anshu
+
 ---
 
 ## License
 
 This project is developed for academic purposes.
-
-## Contributors
-
-- Anshu
