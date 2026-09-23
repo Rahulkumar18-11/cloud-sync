@@ -1,4 +1,4 @@
-cd# CloudSync Frontend
+# CloudSync Frontend
 
 CloudSync is a modern, secure, multi-cloud file storage and management web application built with **React**, **TypeScript**, **Tailwind CSS**, and **React Router v6**. It provides a single centralized interface for managing, organizing, sharing, and versioning files across **Microsoft Azure Blob Storage** and **Google Cloud Storage (GCP)**.
 
@@ -6,11 +6,11 @@ CloudSync is a modern, secure, multi-cloud file storage and management web appli
 
 ## Technical Stack
 
-- **Framework**: React.js 18 + Vite
+- **Framework**: React 19 + Vite
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS + Custom CSS Utilities
+- **Styling**: Tailwind CSS v4 + Custom Utilities
 - **Icons**: Lucide React
-- **Routing**: React Router v6
+- **Routing**: React Router 7
 - **HTTP Client**: Axios (with custom interceptors & JWT injection)
 - **State Management**: React Context (`AuthContext`, `ThemeContext`, `ToastContext`)
 

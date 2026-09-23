@@ -1,87 +1,104 @@
-# CloudSync Database Documentation
+# Database Design & Operations Guide
 
-This directory contains the complete database DDL scripts, seed datasets, and Spring Boot JPA integration guide for CloudSync.
+This directory maintains the relational data model, DDL definitions, seed datasets, and operational procedures for CloudSync's PostgreSQL layer.
 
 ---
 
-## 🗄️ Database Architecture
+## Architectural Overview
 
-The database is built on **PostgreSQL 16** and uses UUIDs (`gen_random_uuid()`) for primary keys.
+CloudSync relies on **PostgreSQL 16** for storing user profiles, folder hierarchies, file metadata, sharing tokens, and audit logs. The physical files themselves are stored in Microsoft Azure Blob Storage and Google Cloud Storage buckets, while PostgreSQL acts as the high-performance metadata catalogue and indexing engine.
 
-### Tables Overview
+### Key Design Decisions
+1. **Universally Unique Identifiers (UUIDv4)**: Primary keys use `gen_random_uuid()` to prevent predictable ID enumeration and simplify distributed multi-region data synchronization.
+2. **Naming Alignment with Spring Data JPA**: All table and column names strictly adhere to standard `snake_case` (e.g., `user_id`, `created_at`, `size_bytes`). This allows Hibernate's default `CamelCaseToUnderscoresNamingStrategy` to map directly to Java fields without requiring repetitive `@Column` annotations.
+3. **Explicit Integrity Rules**: Foreign keys enforce referential integrity with cascading deletes (`ON DELETE CASCADE`) on dependent records such as file versions and share links, preventing orphaned metadata when a file is deleted.
+4. **Timezone Awareness**: All timestamp fields use `TIMESTAMPTZ` (UTC) to eliminate timezone conversion ambiguities across client browsers and cloud regions.
 
-| Table Name | Description | Key Foreign Keys |
+---
+
+## Entity Relationship Summary
+
+The schema is divided into 8 core tables:
+
+| Table Name | Description | Key Relationships |
 | :--- | :--- | :--- |
-| `users` | User accounts, credentials, and roles (`USER`, `ADMIN`) | None |
-| `folders` | Hierarchical folder tree | `parent_id -> folders(id)`, `owner_id -> users(id)` |
-| `files` | File metadata, MIME types, and multi-cloud providers (`AZURE`, `GCP`) | `folder_id -> folders(id)`, `owner_id -> users(id)` |
-| `file_versions` | Version history for each file | `file_id -> files(id)`, `created_by -> users(id)` |
-| `share_links` | Secure public sharing tokens and permissions (`VIEW`, `DOWNLOAD`) | `file_id -> files(id)`, `shared_by -> users(id)` |
-| `activity_logs` | Audit trail for uploads, downloads, deletions, and moves | `user_id -> users(id)` |
-| `cloud_provider_configs` | System/user cloud credentials and primary provider settings | `user_id -> users(id)` |
-| `storage_quotas` | 1-to-1 storage consumption metrics (Azure vs GCP) | `user_id -> users(id)` |
+| `users` | User credentials, roles (`USER`, `ADMIN`), and account state | Parent to folders, files, activity logs, quotas |
+| `folders` | Hierarchical folder tree with self-referencing hierarchy | `parent_id` references `folders(id)`, `owner_id` references `users(id)` |
+| `files` | Primary file records, MIME types, and provider designation (`AZURE`, `GCP`) | `folder_id` references `folders(id)`, `owner_id` references `users(id)` |
+| `file_versions` | Historical revisions with cloud storage paths and change notes | `file_id` references `files(id)` on cascade |
+| `share_links` | Secure public sharing tokens, access limits, and view counters | `file_id` references `files(id)`, `shared_by` references `users(id)` |
+| `activity_logs` | Immutable audit trail for uploads, downloads, renames, and deletions | `user_id` references `users(id)` |
+| `cloud_provider_configs` | System and user cloud connection configurations | `user_id` references `users(id)` |
+| `storage_quotas` | 1-to-1 storage consumption counters per provider | Unique foreign key to `users(id)` |
 
 ---
 
-## 🚀 How to Run the Database
+## Managing the Database Locally
 
-### 1. Start PostgreSQL (Using Docker)
-Ensure Docker Desktop is open, then run:
-```powershell
+We run PostgreSQL in a lightweight Docker container to ensure all team members work against an identical, reproducible database version.
+
+### 1. Launch the Database
+Make sure Docker Desktop is running, then execute from the repository root:
+
+```bash
 docker compose up -d postgres
 ```
-This automatically boots PostgreSQL on port `5432` and loads `schema.sql` and `seed.sql`.
 
-### 2. Verify Database Status
-```powershell
+On first run, Docker automatically mounts and executes:
+- `database/schema.sql` (Creates all tables, constraints, and performance indexes)
+- `database/seed.sql` (Loads default administrative and testing accounts)
+
+### 2. Check Container Health
+```bash
 docker compose ps
 ```
 
-### 3. Query Tables Directly from Terminal
-```powershell
-# List all tables
+### 3. Inspect Tables via Terminal
+You can connect to `psql` directly inside the container without installing PostgreSQL tools on your host machine:
+
+```bash
+# List all created tables
 docker exec -it cloudsync-postgres psql -U postgres -d cloudsync -c "\dt"
 
-# View seeded users
+# View initial seed users
 docker exec -it cloudsync-postgres psql -U postgres -d cloudsync -c "SELECT email, role, is_active FROM users;"
 ```
 
-### 4. Stop Database
-```powershell
+### 4. Stop the Database
+```bash
 docker compose down
 ```
 
-### 5. Wipe and Re-run from Scratch (Reset)
-```powershell
+### 5. Reset to a Clean State
+If you update `schema.sql` or `seed.sql` and want to rebuild the database from scratch:
+
+```bash
 docker compose down -v
 docker compose up -d postgres
 ```
 
 ---
 
-## ☕ Entity Mapping Guide for Backend (Member 2 - Backend)
+## JPA Entity Mapping Reference for Backend Developers
 
-Hibernate's default naming strategy (`CamelCaseToUnderscoresNamingStrategy`) maps Java camelCase directly to PostgreSQL snake_case:
+When implementing Spring Boot entity classes in `com.vaultx.entity` (or `com.cloudsync.entity`), use this mapping specification:
 
-| SQL Table | Java Entity Class | Recommended Annotations |
+| PostgreSQL Table | Java Entity Class | Recommended Field Types & Annotations |
 | :--- | :--- | :--- |
-| `users` | `com.cloudsync.entity.User` | `@Table(name = "users")`, `@Enumerated(EnumType.STRING)` for `role` |
-| `folders` | `com.cloudsync.entity.Folder` | `@Table(name = "folders")`, `@ManyToOne` for `parent` and `owner` |
-| `files` | `com.cloudsync.entity.File` | `@Table(name = "files")`, `@Enumerated` for `provider`, `fileType` |
-| `file_versions` | `com.cloudsync.entity.FileVersion` | `@Table(name = "file_versions")`, `@ManyToOne` for `file` |
-| `share_links` | `com.cloudsync.entity.ShareLink` | `@Table(name = "share_links")`, `@Enumerated` for `permission` |
-| `activity_logs` | `com.cloudsync.entity.ActivityLog` | `@Table(name = "activity_logs")` |
-| `cloud_provider_configs` | `com.cloudsync.entity.CloudProviderConfig` | `@Table(name = "cloud_provider_configs")` |
-| `storage_quotas` | `com.cloudsync.entity.StorageQuota` | `@Table(name = "storage_quotas")`, `@OneToOne` with `User` |
+| `users` | `User.java` | `@Id @GeneratedValue(strategy = GenerationType.UUID) private UUID id;`<br>`@Enumerated(EnumType.STRING) private UserRole role;` |
+| `folders` | `Folder.java` | `@ManyToOne private Folder parent;`<br>`@ManyToOne private User owner;` |
+| `files` | `File.java` | `@Enumerated(EnumType.STRING) private CloudProvider provider;`<br>`@ManyToOne private Folder folder;` |
+| `file_versions` | `FileVersion.java` | `@ManyToOne private File file;`<br>`private Long sizeBytes;` |
+| `share_links` | `ShareLink.java` | `@Column(unique = true) private String token;`<br>`@Enumerated(EnumType.STRING) private SharePermission permission;` |
+| `activity_logs` | `ActivityLog.java` | `private String action;`<br>`private Instant timestamp;` |
+| `cloud_provider_configs` | `CloudProviderConfig.java` | `@Enumerated(EnumType.STRING) private CloudProvider provider;` |
+| `storage_quotas` | `StorageQuota.java` | `@OneToOne @JoinColumn(name = "user_id") private User user;` |
 
 ---
 
-## 🔑 Pre-seeded Accounts for Testing
+## Default Seed Accounts for Local Testing
 
-| Account | Email | Password | Role |
+| Role | Email | Password | Password Hash (BCrypt) |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin@cloudsync.io` | `Password123!` | `ADMIN` |
-| **Regular User** | `user@cloudsync.io` | `Password123!` | `USER` |
-
-*(Password hashes use BCrypt: `$2a$10$7R6vGgD68Hk5q5b/K1C1uehI8Vb0sN8a3y0t7c6d6w3j4o2l8m0hK`)*
-
+| **Admin** | `admin@cloudsync.io` | `Password123!` | `$2a$10$7R6vGgD68Hk5q5b/K1C1uehI8Vb0sN8a3y0t7c6d6w3j4o2l8m0hK` |
+| **User** | `user@cloudsync.io` | `Password123!` | `$2a$10$7R6vGgD68Hk5q5b/K1C1uehI8Vb0sN8a3y0t7c6d6w3j4o2l8m0hK` |

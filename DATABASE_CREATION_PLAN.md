@@ -1,18 +1,18 @@
-# Database Creation Plan - VaultX Project
+# Database Architecture Specification - CloudSync Project
 
-**Status:** Ready for Execution  
+**Status:** Phase 1 Implemented (Schema, Seed & Docker Active)  
 **Date:** 2026-09-10  
-**Estimated Duration:** 2-3 working days
+**Scope:** Relational Model, Constraints, and JPA Entity Mappings
 
 ---
 
-## 🎯 Objective
+## Objective
 
-Create a complete, production-ready PostgreSQL database schema for the VaultX cloud file management system with JPA entity classes, proper relationships, and database migrations.
+Create a complete, production-ready PostgreSQL database schema for the CloudSync cloud file management system with JPA entity classes, proper relationships, and database migrations.
 
 ---
 
-## 📐 Phase 1: Entity Design & JPA Configuration
+## Phase 1: Entity Design & JPA Configuration
 
 ### 1.1 User Entity
 **File:** `src/main/java/com/vaultx/entity/User.java`
@@ -184,25 +184,22 @@ Relationships:
 
 ---
 
-## 🗄️ Phase 2: Database Configuration
+## Phase 2: Database Configuration
 
 ### 2.1 Update application.properties
 
 ```properties
 # PostgreSQL Configuration
-spring.datasource.url=jdbc:postgresql://localhost:5432/vaultx
-spring.datasource.username=vaultx_user
-spring.datasource.password=${DB_PASSWORD}
+spring.datasource.url=jdbc:postgresql://localhost:5432/cloudsync
+spring.datasource.username=postgres
+spring.datasource.password=password
 spring.datasource.driver-class-name=org.postgresql.Driver
 
 # JPA/Hibernate Configuration
 spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
-spring.jpa.hibernate.ddl-auto=validate
-spring.jpa.show-sql=false
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
-spring.jpa.properties.hibernate.jdbc.batch_size=20
-spring.jpa.properties.hibernate.order_inserts=true
-spring.jpa.properties.hibernate.order_updates=true
 
 # Connection Pool (HikariCP)
 spring.datasource.hikari.maximum-pool-size=10
@@ -210,16 +207,9 @@ spring.datasource.hikari.minimum-idle=2
 spring.datasource.hikari.connection-timeout=20000
 ```
 
-### 2.2 Add Database Migration (Liquibase)
-
-**Decision:** Use Liquibase for version control of database schemas
-- **File:** `src/main/resources/db/changelog/master.yaml`
-- Versioned SQL scripts for each entity creation
-- Supports rollback and tracking of changes
-
 ---
 
-## 🔧 Phase 3: Implementation Steps
+## Phase 3: Implementation Steps
 
 ### Step 1: Create Entity Classes
 - Create all 8 entity classes with annotations
@@ -250,18 +240,9 @@ Add custom query methods as needed (e.g., `findByEmail`, `findByOwnerId`, etc.)
 - `FolderService`
 - etc.
 
-### Step 5: Update pom.xml
-Add dependencies:
-```xml
-<dependency>
-    <groupId>org.liquibase</groupId>
-    <artifactId>liquibase-core</artifactId>
-</dependency>
-```
-
 ---
 
-## 📋 Detailed Tasks Breakdown
+## Detailed Tasks Breakdown
 
 ```
 DATABASE CREATION PROJECT
@@ -317,86 +298,69 @@ DATABASE CREATION PROJECT
 
 ---
 
-## 🎓 Key Considerations
+## Key Considerations
 
 1. **UUIDs vs Auto-Increment IDs**
    - Using UUID for primary keys (recommended for distributed systems)
-   - PostgreSQL `uuid-ossp` extension needed
+   - PostgreSQL native `gen_random_uuid()` used
 
 2. **Audit Fields**
    - All entities should have `createdAt` and `updatedAt` timestamps
-   - Consider using Hibernate `@CreationTimestamp` and `@UpdateTimestamp`
+   - Uses Hibernate `@CreationTimestamp` and `@UpdateTimestamp`
 
 3. **Cascading**
    - Careful cascading strategy for deletions (e.g., cascadeType.ALL)
-   - Decide deletion behavior for orphaned versions when file is deleted
+   - Orphaned versions and share links cascade on file deletion
 
-4. **Soft Deletes** (Optional)
-   - Consider soft deletes for files/folders (add `isDeleted` flag)
-   - Useful for data recovery
-
-5. **Performance Indexes**
+4. **Performance Indexes**
    - Index on `email` for user lookups
    - Index on `ownerId` for file/folder queries
    - Index on `createdAt` for sorting/filtering
 
-6. **Database User Permissions**
-   - Create dedicated database user with minimal required permissions
-   - Don't use admin account for application
+5. **Database User Permissions**
+   - Use dedicated database user with minimal required permissions
 
 ---
 
-## ✅ Success Criteria
+## Success Criteria
 
-- [ ] All 8 entity classes created with proper annotations
-- [ ] All relationships properly defined
+- [x] All 8 relational tables designed and specified
+- [x] All relationships properly defined
+- [x] PostgreSQL database running via Docker Compose
+- [x] All tables created with proper constraints
+- [x] Foreign keys properly configured
+- [x] Indexes created on performance-critical columns
+- [x] Seed data inserted for testing
+- [x] Backend connects successfully
+- [ ] JPA entity classes created in backend
 - [ ] All repositories created with custom query methods
-- [ ] Liquibase changelogs created and validated
-- [ ] PostgreSQL database created successfully
-- [ ] All tables created with proper constraints
-- [ ] Foreign keys properly configured
-- [ ] Indexes created on performance-critical columns
 - [ ] Integration tests passing (CRUD operations)
-- [ ] Application starts without errors
-- [ ] Schema documented with ER diagram
 
 ---
 
-## 📞 Dependencies & Prerequisites
+## Dependencies & Prerequisites
 
-- PostgreSQL 12+ installed and running
+- Docker Desktop installed and running
+- Java 21+ JDK configured
 - Maven 3.8+ configured
-- Java 21 JDK configured
-- PostgreSQL client tools (psql or similar)
-- VS Code extensions: REST Client (for testing APIs later)
 
 ---
 
-## 🚨 Risk Mitigation
+## Risk Mitigation
 
 | Risk | Mitigation |
 |------|-----------|
-| Schema migration issues | Use Liquibase with rollback scripts |
-| Data type mismatches | Validate types against frontend requirements |
-| Performance issues | Add indexes proactively |
-| Connection pool exhaustion | Configure HikariCP properly |
-| UUID generation overhead | Use PostgreSQL native UUID generation |
+| Schema drift | Keep schema.sql and JPA entities strictly aligned |
+| Data type mismatches | Validate types against frontend TypeScript types |
+| Performance bottlenecks | Indexes placed proactively on foreign keys and search fields |
+| Connection pool exhaustion | HikariCP configured properly |
 
 ---
 
-## 📅 Timeline
+## Next Actions
 
-- **Day 1:** Phases 1-2 (Entity Design & Configuration)
-- **Day 2:** Phases 3-4 (Repository Layer & Migration Scripts)
-- **Day 3:** Phases 5-6 (Testing & Documentation)
-
----
-
-## 🔄 Next Actions
-
-1. ✅ Review and approve this plan
-2. ⬜ Start Phase 1: Create entity classes
-3. ⬜ Create database migrations
-4. ⬜ Test database connectivity
-5. ⬜ Validate schema with frontend types
+1. Review and approve database schema
+2. Backend Lead creates JPA entity classes
+3. Backend Lead creates Spring Data JPA repositories
+4. Implement REST API endpoints matching frontend contracts
 

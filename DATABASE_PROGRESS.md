@@ -1,64 +1,64 @@
-# Database Creation Progress - VaultX Project
+# Database Creation Progress - CloudSync Project
 
-**Project Name:** VaultX - Cloud File Management System  
+**Project Name:** CloudSync - Multi-Cloud File Management System  
 **Date Created:** 2026-09-10  
-**Status:** Database Planning Phase
+**Status:** Database Phase 1 Completed
 
 ---
 
-## 📋 Project Overview
+## Project Overview
 
-VaultX is a full-stack cloud file management application with the following architecture:
+CloudSync is a full-stack cloud file management application with the following architecture:
 - **Frontend:** React + TypeScript with Vite
-- **Backend:** Spring Boot 4.1.0 (Java 21)
-- **Database:** PostgreSQL
+- **Backend:** Spring Boot (Java 21/25)
+- **Database:** PostgreSQL 16
 - **Cloud Providers:** Azure & GCP integration
 
 ---
 
-## ✅ Work Completed Till Now
+## Work Completed Till Now
 
-### 1. **Project Structure Setup**
-- ✅ Full-stack project structure created with separate frontend and backend directories
-- ✅ Maven configuration (pom.xml) setup with Spring Boot 4.1.0
-- ✅ React TypeScript frontend with Vite build tool
-- ✅ Folder hierarchy established for source code organization
+### 1. Project Structure Setup
+- Full-stack project structure created with separate frontend and backend directories
+- Maven configuration (pom.xml) setup with Spring Boot
+- React TypeScript frontend with Vite build tool
+- Folder hierarchy established for source code organization
 
-### 2. **Frontend Development**
-- ✅ TypeScript type definitions created for all major entities:
+### 2. Frontend Development
+- TypeScript type definitions created for all major entities:
   - User & Authentication types
   - File & Folder types
   - Share & Permission types
   - Activity types
   - Admin & Storage types
-- ✅ React components structured:
+- React components structured:
   - Layout components (Navbar, Sidebar, AdminRoute, ProtectedRoute)
   - File explorer components (FileGrid, FileList, BreadcrumbNavigation)
   - File management modals (RenameModal, MoveModal, CreateFolderModal)
   - Activity tracking components
   - Admin management panels
-- ✅ API client layer setup (axiosInstance, authApi, fileApi, folderApi, etc.)
-- ✅ Context API setup (AuthContext, ThemeContext, ToastContext)
-- ✅ Custom hooks (useAuth, useToast, useDebounce)
+- API client layer setup (axiosInstance, authApi, fileApi, folderApi, etc.)
+- Context API setup (AuthContext, ThemeContext, ToastContext)
+- Custom hooks (useAuth, useToast, useDebounce)
 
-### 3. **Backend Setup**
-- ✅ Spring Boot application initialized (VaultxApplication.java)
-- ✅ Maven dependencies configured:
+### 3. Backend Setup
+- Spring Boot application initialized (VaultxApplication.java)
+- Maven dependencies configured:
   - Spring Boot Starter Data JPA (for ORM)
   - Spring Boot Starter Web MVC
   - PostgreSQL JDBC driver
   - Lombok (for reducing boilerplate)
-- ✅ Basic controller structure (TestController)
-- ✅ Application properties file created
+- Basic controller structure (TestController)
+- Application properties file created and configured for PostgreSQL
 
-### 4. **Architecture Documentation**
-- ✅ Architecture overview documented
-- ✅ System flow defined (Frontend → Backend → Database)
-- ✅ Team assignments documented
+### 4. Architecture Documentation
+- Architecture overview documented
+- System flow defined (Frontend -> Backend -> Database)
+- Team assignments documented
 
 ---
 
-## 📊 Data Model Identified (From Frontend Types)
+## Data Model Identified (From Frontend Types)
 
 ### Core Entities:
 1. **User**
@@ -75,7 +75,7 @@ VaultX is a full-stack cloud file management application with the following arch
    - id, name, parentId, createdAt, updatedAt, ownerId, itemsCount, sizeBytes
 
 5. **ShareLink**
-   - (Partial) - has permissions (VIEW/DOWNLOAD)
+   - token, permission (VIEW/DOWNLOAD), expiresAt, viewsCount, downloadsCount
 
 6. **Activity**
    - User activity tracking for files/folders
@@ -88,7 +88,7 @@ VaultX is a full-stack cloud file management application with the following arch
 
 ---
 
-## 🚀 Next Tasks
+## Next Tasks
 
 ### Phase 1: Database Schema & Local Setup (Completed)
 - [x] Create PostgreSQL DDL schema with 8 entities (schema.sql)
@@ -112,7 +112,7 @@ VaultX is a full-stack cloud file management application with the following arch
 
 ---
 
-## 📁 Current Directory Status
+## Current Directory Status
 
 ```
 project-root/
@@ -126,23 +126,21 @@ project-root/
 
 ---
 
-## 🔧 Technology Stack Confirmed
+## Technology Stack Confirmed
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| JDK | Java | 21 |
-| Framework | Spring Boot | 4.1.0 |
+| JDK | Java | 21 / 25 |
+| Framework | Spring Boot | 4.x / 3.x |
 | ORM | Hibernate (via Spring Data JPA) | - |
-| Database | PostgreSQL | Latest |
+| Database | PostgreSQL | 16 |
 | Build Tool | Maven | 3.x |
 | Database Migrations | (To be decided) | - |
 
 ---
 
-## 📝 Notes
+## Notes
 
-- The project is using Spring Boot 4.1.0, which is a recent stable version with excellent JPA support
-- PostgreSQL is configured as the database driver in pom.xml
+- PostgreSQL is running and verified with Docker Compose
 - Frontend types are well-defined and provide clear data model guidance
-- All necessary Maven dependencies are already in place for database connectivity
-
+- All necessary Maven dependencies are in place for database connectivity
