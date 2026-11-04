@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, LoginCredentials, RegisterCredentials } from '../types/auth';
 import { authApi } from '../api/authApi';
 import { storage } from '../utils/storage';
@@ -17,33 +17,33 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => storage.getUser<User>());
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const initAuth = async () => {
+    let cancelled = false;
+
+    const initialize = async () => {
       const token = storage.getToken();
-      if (token) {
-        try {
-          const currentUser = await authApi.getCurrentUser();
-          setUser(currentUser);
-          storage.setUser(currentUser);
-        } catch (err) {
-          console.error('Failed to validate stored token', err);
-          storage.clearAuth();
-          setUser(null);
-        }
-      } else {
-        // Default to mock user if mock mode is on and no token set yet
-        const defaultUser = storage.getUser<User>();
-        if (defaultUser) {
-          setUser(defaultUser);
-        }
+      if (!token) {
+        storage.removeUser();
+        if (!cancelled) setIsLoading(false);
+        return;
       }
-      setIsLoading(false);
+
+      try {
+        const currentUser = await authApi.getCurrentUser();
+        if (!cancelled) setUser(currentUser);
+      } catch {
+        storage.clearAuth();
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     };
 
-    initAuth();
+    void initialize();
+    return () => { cancelled = true; };
   }, []);
 
   const login = async (credentials: LoginCredentials) => {
@@ -67,23 +67,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    setIsLoading(true);
-    try {
-      await authApi.logout();
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
+    await authApi.logout();
+    setUser(null);
   };
 
   const refreshUser = async () => {
-    try {
-      const currentUser = await authApi.getCurrentUser();
-      setUser(currentUser);
-      storage.setUser(currentUser);
-    } catch (err) {
-      console.warn('Failed to refresh user profile', err);
-    }
+    const currentUser = await authApi.getCurrentUser();
+    setUser(currentUser);
   };
 
   const value: AuthContextType = {
@@ -102,8 +92,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
