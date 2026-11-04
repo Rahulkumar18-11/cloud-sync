@@ -11,6 +11,7 @@ The CloudSync frontend is built with React, TypeScript, Vite and Tailwind CSS. I
 - File download and deletion
 - Share-link generation with 7-day, 30-day or no-expiry options
 - Public shared-file page and download
+- Storage badge reflects whether a file is stored locally or in Amazon S3
 - Light/dark theme
 
 Folders, file renaming, file versions, admin tools, activity logs and profile/quota screens are not part of the current connected MVP.
@@ -27,7 +28,7 @@ Folders, file renaming, file versions, admin tools, activity logs and profile/qu
 
 ## Run locally (Windows Git Bash)
 
-Start the FastAPI backend and PostgreSQL first. The backend should be available at `http://127.0.0.1:8000`.
+Start PostgreSQL and the FastAPI backend first. The backend should be available at `http://127.0.0.1:8000`.
 
 From the repository root, open a second Git Bash terminal:
 
@@ -45,9 +46,27 @@ The tracked `.env.example` contains:
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
 VITE_USE_MOCK_DATA=false
+VITE_PUBLIC_APP_URL=http://localhost:5173
 ```
 
-Do not commit the local `.env` file. The API base URL must include the FastAPI versioned prefix `/api/v1`.
+- `VITE_API_BASE_URL` is the FastAPI base URL and must include `/api/v1`.
+- `VITE_PUBLIC_APP_URL` is the base URL placed in generated share links.
+- In local development, `http://localhost:5173` is expected. It works only on the developer's computer.
+- For a public deployment, set `VITE_PUBLIC_APP_URL` to the public frontend HTTPS URL and `VITE_API_BASE_URL` to the public FastAPI HTTPS URL ending in `/api/v1`. Rebuild/restart Vite after changing Vite environment variables.
+
+Do not commit the local `.env` file.
+
+## How sharing works
+
+A share link points to the CloudSync frontend's shared-file page, for example:
+
+```text
+https://cloudsync.example.com/shared/<share-token>
+```
+
+The React page asks FastAPI to validate the token and its expiry. When the recipient downloads, FastAPI retrieves the file from its recorded storage backend (local disk or private S3) and streams it to the browser.
+
+The link is not an S3 URL. Keeping the bucket private means recipients do not get direct public bucket access. A localhost link is not internet-accessible; to share with other people, deploy the frontend and backend to public HTTPS addresses or expose both through correctly configured temporary HTTPS tunnels.
 
 ## Connected API operations
 
@@ -61,7 +80,7 @@ Do not commit the local `.env` file. The API base URL must include the FastAPI v
 | GET | `/api/v1/files/{file_id}/download` | Download an owned file |
 | DELETE | `/api/v1/files/{file_id}` | Delete an owned file |
 | POST | `/api/v1/files/{file_id}/share` | Generate a share link |
-| GET | `/api/v1/shares/{token}` | Load public shared-file details |
+| GET | `/api/v1/shares/{token}` | Load public shared-file details, including storage backend |
 | GET | `/api/v1/shares/{token}/download` | Download through a valid share token |
 
 ## Build
@@ -75,4 +94,4 @@ The root GitHub Actions workflow also builds the frontend and runs the Python ba
 
 ## Storage
 
-The current frontend uploads to the backend's local storage implementation. Amazon S3 is planned as the next storage backend; the frontend should continue using the same API contract when S3 is introduced.
+The frontend sends uploads to FastAPI. The backend stores new files in the configured local or S3 backend. The frontend continues to use the same API contract in either mode; it does not connect directly to S3.
