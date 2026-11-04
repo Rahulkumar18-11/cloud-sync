@@ -1,15 +1,6 @@
-map $http_x_cloudsync_origin_token $cloudsync_origin_allowed {
-    default 0;
-    "${ORIGIN_TOKEN}" 1;
-}
-
 server {
     listen 80;
     server_name _;
-
-    if ($cloudsync_origin_allowed = 0) {
-        return 403;
-    }
 
     root /usr/share/nginx/html;
     index index.html;
@@ -21,7 +12,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_connect_timeout 30s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
@@ -30,7 +21,7 @@ server {
     location = /health {
         proxy_pass http://backend:8000/health;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /assets/ {
