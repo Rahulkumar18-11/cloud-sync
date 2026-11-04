@@ -94,6 +94,14 @@ export const fileApi = {
     await axiosInstance.delete(`/files/${id}`);
   },
 
+  renameFile: async (_id: string, _newName: string): Promise<FileItem> => {
+    throw new Error('Renaming files is not available in this MVP yet.');
+  },
+
+  moveFile: async (_id: string, _targetFolderId: string | null): Promise<FileItem> => {
+    throw new Error('Folders are not available in this MVP yet.');
+  },
+
   downloadFile: async (id: string, fileName: string): Promise<void> => {
     const response = await axiosInstance.get<Blob>(`/files/${id}/download`, {
       responseType: 'blob',
