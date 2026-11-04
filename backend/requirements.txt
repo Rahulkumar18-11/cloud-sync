@@ -1,21 +1,21 @@
 # API framework and server
 fastapi>=0.115,<1.0
-uvicorn>=0.30,<1.0
+uvicorn[standard]>=0.30,<1.0
 
 # Configuration and validation
 pydantic>=2.8,<3.0
 pydantic-settings>=2.4,<3.0
+email-validator>=2.2,<3.0
 
-# PostgreSQL integration (next phase)
+# PostgreSQL database access
 SQLAlchemy>=2.0,<3.0
 psycopg[binary]>=3.2,<4.0
-alembic>=1.13,<2.0
 
-# Basic authentication (later phase)
+# Authentication and password hashing
 PyJWT>=2.9,<3.0
 pwdlib[argon2]>=0.2,<1.0
 
-# File uploads
+# Multipart uploads
 python-multipart>=0.0.9
 
 # Testing and code quality
