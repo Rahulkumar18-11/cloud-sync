@@ -75,7 +75,7 @@ services:
     ports:
       - "80:80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --header='X-CloudSync-Origin-Token: ${ORIGIN_TOKEN}' -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 5
