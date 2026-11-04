@@ -3,7 +3,6 @@ map $http_x_cloudsync_origin_token $cloudsync_origin_allowed {
     "${ORIGIN_TOKEN}" 1;
 }
 
-
 server {
     listen 80;
     server_name _;
@@ -31,7 +30,7 @@ server {
     location = /health {
         proxy_pass http://backend:8000/health;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $cloudsync_forwarded_proto;
+        proxy_set_header X-Forwarded-Proto https;
     }
 
     location /assets/ {
