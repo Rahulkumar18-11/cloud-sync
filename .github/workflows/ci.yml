@@ -78,6 +78,18 @@ jobs:
           pip install cfn-lint
           cfn-lint infra/aws/cloudformation-ec2-cloudfront.yaml
 
+      - name: Validate production Compose configuration
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_PASSWORD=1234567890abcdef1234567890abcdef
+          JWT_SECRET_KEY=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+          AWS_REGION=us-east-1
+          AWS_S3_BUCKET=cloudsync-ci-bucket
+          ORIGIN_TOKEN=1234567890abcdef1234567890abcdef12345678
+          EOF
+          docker compose -f docker-compose.prod.yml config --quiet
+          rm -f .env
+
       - name: Build backend container
         run: docker build -t cloudsync-api:ci ./backend
 
