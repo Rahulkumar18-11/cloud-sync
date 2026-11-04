@@ -1,6 +1,6 @@
 -- =============================================================================
 -- CloudSync PostgreSQL Database Schema
--- Compatible with PostgreSQL 13+ and Spring Boot Data JPA
+-- Compatible with PostgreSQL 13+; storage providers are local development storage and Amazon S3
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -58,7 +58,7 @@ CREATE TABLE files (
     mime_type VARCHAR(100) NOT NULL,
     file_type VARCHAR(30) NOT NULL CHECK (file_type IN ('pdf', 'image', 'doc', 'spreadsheet', 'presentation', 'code', 'archive', 'audio', 'video', 'other')),
     size_bytes BIGINT NOT NULL DEFAULT 0,
-    provider VARCHAR(20) NOT NULL DEFAULT 'AZURE' CHECK (provider IN ('AZURE', 'GCP')),
+    provider VARCHAR(20) NOT NULL DEFAULT 'LOCAL' CHECK (provider IN ('LOCAL', 'AWS_S3')),
     folder_id UUID REFERENCES folders(id) ON DELETE CASCADE,
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     current_version_id UUID,
@@ -80,7 +80,7 @@ CREATE TABLE file_versions (
     file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
     version_number INT NOT NULL DEFAULT 1,
     size_bytes BIGINT NOT NULL,
-    cloud_path TEXT NOT NULL,
+    storage_key TEXT NOT NULL,
     download_url TEXT,
     notes TEXT,
     is_current BOOLEAN NOT NULL DEFAULT FALSE,
@@ -127,7 +127,7 @@ CREATE TABLE activity_logs (
     details TEXT,
     target_name VARCHAR(255) NOT NULL,
     target_id UUID,
-    provider VARCHAR(20) CHECK (provider IN ('AZURE', 'GCP')),
+    provider VARCHAR(20) CHECK (provider IN ('LOCAL', 'AWS_S3')),
     ip_address VARCHAR(50),
     timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -141,7 +141,7 @@ CREATE INDEX idx_activity_logs_timestamp ON activity_logs(timestamp DESC);
 CREATE TABLE cloud_provider_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    provider VARCHAR(20) NOT NULL CHECK (provider IN ('AZURE', 'GCP')),
+    provider VARCHAR(20) NOT NULL CHECK (provider IN ('AWS_S3')),
     account_email VARCHAR(150),
     container_or_bucket_name VARCHAR(150),
     is_configured BOOLEAN NOT NULL DEFAULT FALSE,
@@ -162,8 +162,8 @@ CREATE TABLE storage_quotas (
     user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     used_bytes BIGINT NOT NULL DEFAULT 0,
     total_bytes BIGINT NOT NULL DEFAULT 10737418240, -- 10GB default
-    azure_used_bytes BIGINT NOT NULL DEFAULT 0,
-    gcp_used_bytes BIGINT NOT NULL DEFAULT 0,
+    local_used_bytes BIGINT NOT NULL DEFAULT 0,
+    aws_s3_used_bytes BIGINT NOT NULL DEFAULT 0,
     files_count INT NOT NULL DEFAULT 0,
     folders_count INT NOT NULL DEFAULT 0,
     last_calculated TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
