@@ -26,8 +26,8 @@ This is a compact demo deployment: one EC2 host is a single point of failure. Fo
 1. The existing private S3 bucket, cloudsync-your-unique-suffix, in us-east-1.
 2. The S3 object IAM policy already tested with the local IAM user.
 3. A VPC and a public subnet in the same VPC. The subnet must have a route to an Internet Gateway and auto-assign public IPv4 enabled.
-4. Your IAM deployment identity must temporarily receive the permissions in infra/aws/deployment-operator-policy.json. An administrator must attach this customer-managed policy to cloudsync-local-dev (or another deployment operator). It permits the stack to create EC2, its scoped instance role, and CloudFront; it does not grant administrator access to the AWS account.
-5. After the stack is created, attach infra/aws/session-manager-access-policy.json to the operator and detach CloudSyncDeploymentProvisioner. Keep the existing CloudSyncS3ObjectAccess policy if you still use the CLI to test S3. To update/delete the stack later, temporarily reattach the deployment policy. Do not open port 22 or use root credentials for the application.
+4. Your IAM deployment identity must temporarily receive the permissions in infra/aws/deployment-operator-policy.json. An administrator should create a customer-managed policy named CloudSyncDeploymentProvisioner from that JSON and attach it to cloudsync-local-dev (or another deployment operator). It permits the stack to create EC2, its scoped instance role, and CloudFront; it does not grant administrator access to the AWS account.
+5. After the stack is created, create and attach a customer-managed policy named CloudSyncSessionManagerAccess from infra/aws/session-manager-access-policy.json, then detach CloudSyncDeploymentProvisioner. Keep the existing CloudSyncS3ObjectAccess policy if you still use the CLI to test S3. To update/delete the stack later, temporarily reattach CloudSyncDeploymentProvisioner. Do not open port 22 or use root credentials for the application.
 
 ## 1. Create the stack
 
