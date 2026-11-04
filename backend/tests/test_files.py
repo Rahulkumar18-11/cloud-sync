@@ -75,8 +75,8 @@ def test_file_endpoints_require_authentication(client) -> None:
 def test_s3_storage_backend_upload_share_download_and_delete(client, monkeypatch) -> None:
     from io import BytesIO
 
-    from app.core.config import get_settings
     from app import storage
+    from app.core.config import get_settings
 
     class FakeS3Client:
         def __init__(self) -> None:
