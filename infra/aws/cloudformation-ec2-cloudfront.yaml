@@ -1,0 +1,199 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  CloudSync small-project deployment: EC2 Docker host, private S3 access through
+  an instance role, and CloudFront HTTPS in front of the application.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Choose the VPC containing the public subnet below.
+  PublicSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Choose a public subnet in the selected VPC with a route to an Internet Gateway.
+  S3BucketName:
+    Type: String
+    Default: cloudsync-your-unique-suffix
+    Description: Existing private bucket used for CloudSync file objects.
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.small
+      - t3.medium
+    Description: t3.small is a 2 GiB starting size for this small-project deployment.
+  OriginToken:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    MaxLength: 128
+    AllowedPattern: "^[A-Za-z0-9_-]+$"
+    Description: Random secret sent only by CloudFront to prevent direct requests to the EC2 web origin.
+  GitRepositoryUrl:
+    Type: String
+    Default: https://github.com/Rahulkumar18-11/cloud-sync.git
+    Description: Git clone URL for the CloudSync repository.
+  GitBranch:
+    Type: String
+    Default: feature/python-fastapi-migration
+    Description: Branch to deploy.
+
+Resources:
+  CloudSyncSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: CloudSync web origin; requests are additionally checked for the CloudFront origin token.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: CloudFront custom origin HTTP traffic
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - Description: Outbound access for package installation, GitHub, SSM, and AWS APIs
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: cloudsync-origin-sg
+
+  CloudSyncEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: CloudSyncS3ObjectAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CloudSyncObjectsOnly
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:\${AWS::Partition}:s3:::\${S3BucketName}/*
+      Tags:
+        - Key: Name
+          Value: cloudsync-ec2-role
+
+  CloudSyncInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref CloudSyncEC2Role
+
+  CloudSyncInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Sub "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}"
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref CloudSyncInstanceProfile
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref CloudSyncSecurityGroup
+          SubnetId: !Ref PublicSubnetId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 24
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf update -y
+          dnf install -y docker git curl
+          systemctl enable --now docker
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          mkdir -p /opt/cloudsync
+          git clone --depth 1 --branch \${GitBranch} \${GitRepositoryUrl} /opt/cloudsync
+          chown -R ec2-user:ec2-user /opt/cloudsync
+          echo "CloudSync files are in /opt/cloudsync. Create the server .env file before starting docker compose." > /opt/cloudsync/DEPLOYMENT-READY.txt
+          chown ec2-user:ec2-user /opt/cloudsync/DEPLOYMENT-READY.txt
+      Tags:
+        - Key: Name
+          Value: cloudsync-app-server
+        - Key: Project
+          Value: CloudSync
+
+  CloudSyncCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - CloudSyncInstance
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: CloudSync public HTTPS application endpoint
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: CloudSyncEC2Origin
+            DomainName: !GetAtt CloudSyncInstance.PublicDnsName
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+              OriginSSLProtocols:
+                - TLSv1.2
+            OriginCustomHeaders:
+              - HeaderName: X-CloudSync-Origin-Token
+                HeaderValue: !Ref OriginToken
+        DefaultCacheBehavior:
+          TargetOriginId: CloudSyncEC2Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          CachePolicyId: 413f160f-4a8a-4f17-8d9d-1a7d6a7d1f1d
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  PublicApplicationUrl:
+    Description: Public HTTPS URL for CloudSync and share links.
+    Value: !Sub https://\${CloudSyncCloudFrontDistribution.DomainName}
+  CloudFrontDomainName:
+    Description: CloudFront domain used by public share links.
+    Value: !GetAtt CloudSyncCloudFrontDistribution.DomainName
+  EC2InstanceId:
+    Description: Use this instance ID when connecting with Systems Manager Session Manager.
+    Value: !Ref CloudSyncInstance
+  EC2PublicDns:
+    Description: Custom origin DNS name used by CloudFront.
+    Value: !GetAtt CloudSyncInstance.PublicDnsName
+  S3Bucket:
+    Description: Existing CloudSync file bucket.
+    Value: !Ref S3BucketName
