@@ -1,68 +1,71 @@
 # CloudSync
 
-CloudSync is a simple file storage and sharing application. Users can register, upload files, view their files, download them, and share files through links.
+CloudSync is a straightforward file storage and sharing application. Users can create accounts, upload and manage files, and share files through expiring links.
 
-The backend is being moved from Java/Spring Boot to **Python/FastAPI**. The existing React frontend is retained. PostgreSQL stores application metadata, and Amazon S3 is the planned cloud storage target.
+The backend is **Python/FastAPI** with **PostgreSQL** for metadata. The existing **React + TypeScript** frontend is now connected to the FastAPI MVP. Local disk is used for file bytes during development; **Amazon S3** is the planned cloud-storage backend.
 
-## Current progress
+## Current MVP
 
-| Component | Status |
+| Feature | Status |
 | --- | --- |
-| Python FastAPI backend | Starter API and MVP routes implemented |
-| Authentication | Registration, login, Argon2 password hashing, JWT bearer tokens |
-| File management | Upload, list, download, and delete using local storage |
-| File sharing | Share links with optional expiry and public download |
-| PostgreSQL | Schema and Docker Compose service prepared; connect it before starting the API |
-| React frontend | Existing UI retained; integration with the Python API is still pending |
-| AWS S3 | Planned next storage backend; not required to run locally yet |
+| User registration and login | Implemented |
+| Password hashing and JWT authentication | Implemented |
+| File upload, list, download and delete | Implemented |
+| Share links with optional expiry | Implemented |
+| React login, registration, file dashboard and shared-file page | Connected to FastAPI |
+| PostgreSQL persistence | Implemented |
+| Local file storage | Implemented |
+| Amazon S3 storage | Planned |
+| Folders, file versions, activity logs and admin tools | Outside the current MVP |
 
-**Scope:** make a small working project first. No microservices, Kubernetes, background workers, complex admin dashboards, or advanced analytics.
+The upload limit is 50 MB per file by default. It can be changed with `MAX_UPLOAD_SIZE_MB` in `backend/.env`.
 
 ## Technology stack
 
-| Part | Technology |
+| Layer | Technology |
 | --- | --- |
 | Backend | Python, FastAPI, Uvicorn |
 | Validation/configuration | Pydantic, pydantic-settings |
 | Database | PostgreSQL 16, SQLAlchemy 2.x, Psycopg 3 |
 | Authentication | JWT (PyJWT), Argon2 password hashing (pwdlib) |
-| Local file storage | Local uploads directory |
+| Current file storage | Local disk under `backend/uploads/` |
 | Planned cloud storage | Amazon S3 using Boto3 |
-| Frontend | Existing React + TypeScript + Vite |
-| Testing | pytest, HTTPX, SQLite test database |
-| Code quality | Ruff |
-| Local database container | Docker Compose |
-| CI | GitHub Actions |
+| Frontend | React, TypeScript, Vite, Tailwind CSS |
+| Frontend HTTP client | Axios |
+| Tests and quality | pytest, HTTPX, Ruff |
+| Local services | Docker Compose |
+| CI | GitHub Actions (Python tests/lint + frontend build) |
 
 ## Architecture
 
-### Current local development flow
+### Current local setup
 
 ```text
-React frontend (integration pending)
-              |
-              v
-       Python FastAPI
-          /       \
-         v         v
-    PostgreSQL   Local disk
-    (metadata)   (file bytes)
+React + TypeScript
+       |
+       | HTTP / JWT
+       v
+Python FastAPI
+   |          |
+   v          v
+PostgreSQL   Local disk
+(metadata)   (file contents)
 ```
 
-### Planned AWS storage flow
+### Planned AWS storage
 
 ```text
-       React frontend
-              |
-              v
-       Python FastAPI
-          /       \
-         v         v
-    PostgreSQL   Amazon S3
-    (metadata)   (file bytes)
+React + TypeScript
+       |
+       v
+Python FastAPI
+   |          |
+   v          v
+PostgreSQL   Amazon S3
+(metadata)   (file contents)
 ```
 
-File contents are currently stored locally. PostgreSQL stores file ownership, names, content types, sizes, storage keys, and share-link records. AWS S3 integration will replace local disk as the cloud storage option later. The S3 bucket will remain private; share downloads will be authorized by the API before a short-lived download URL is issued.
+PostgreSQL stores user accounts, ownership, file metadata, storage keys and share links. File contents remain on local disk until the S3 storage adapter is implemented. The future S3 bucket will be private; public sharing will be authorized by the API before a short-lived download is provided.
 
 ## Repository structure
 
@@ -85,13 +88,28 @@ cloud-sync/
 │   ├── schema.sql
 │   └── seed.sql
 ├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── .env.example
 ├── docker-compose.yml
 └── README.md
 ```
 
 ## Run locally (Windows Git Bash)
 
-### 1. Clone the migration branch
+Use **two terminals**: one for the backend and one for the frontend. Keep PostgreSQL running in Docker.
+
+### 1. Get the current migration branch
+
+For an existing clone:
+
+```bash
+cd ~/Desktop/cloud-sync
+git switch feature/python-fastapi-migration
+git pull origin feature/python-fastapi-migration
+```
+
+For a fresh clone:
 
 ```bash
 git clone -b feature/python-fastapi-migration https://github.com/Rahulkumar18-11/cloud-sync.git
@@ -105,12 +123,11 @@ Run from the repository root:
 ```bash
 docker compose up -d postgres
 docker compose ps
-docker compose logs postgres --tail=30
 ```
 
-Wait until the PostgreSQL container is healthy. On a fresh Docker volume, Compose initializes the database using `database/schema.sql`.
+Wait until the `postgres` service is healthy.
 
-### 3. Set up the Python backend
+### 3. Configure and start the backend (Terminal 1)
 
 ```bash
 cd backend
@@ -119,50 +136,58 @@ source .venv/Scripts/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 cp .env.example .env
-```
-
-If you already have the environment and dependencies, activate it and run `pip install -r requirements.txt` after pulling updates.
-
-### 4. Start the API
-
-From `backend/` with the virtual environment active:
-
-```bash
+python -m app.db.init_db
 uvicorn app.main:app --reload
 ```
 
-Open the Swagger page at http://127.0.0.1:8000/docs.
+If `.venv` already exists, activate it and run `pip install -r requirements.txt` after pulling updates. The database initialization command creates any missing MVP tables; it does not delete existing records.
 
-### 5. Start the frontend
+Backend URLs:
 
-In a separate terminal:
+- Swagger API docs: http://127.0.0.1:8000/docs
+- Health check: http://127.0.0.1:8000/health
+
+### 4. Configure and start the frontend (Terminal 2)
+
+From the repository root in a second Git Bash terminal:
 
 ```bash
-cd frontend
-npm install
+cd ~/Desktop/cloud-sync/frontend
+cp .env.example .env
+npm ci
 npm run dev
 ```
 
-The existing frontend is not yet connected to the new Python endpoints; the API can be tested independently through Swagger in the meantime.
+Open http://localhost:5173.
+
+The frontend environment file points to the local FastAPI API at `http://127.0.0.1:8000/api/v1` and disables mock mode. Do not commit either local `.env` file.
+
+## Use the application
+
+1. Open http://localhost:5173 and create an account.
+2. Sign in. Your session is authenticated with a JWT bearer token.
+3. Upload one or more files from the dashboard.
+4. Download or delete a file from its actions.
+5. Create a share link and copy it. Open the link in another browser/private window to test public download.
+
+The current frontend MVP deliberately focuses on these supported workflows. Legacy folder, version history, profile, activity and admin screens are not connected to the Python API yet.
 
 ## API routes
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| POST | `/api/v1/auth/register` | Register a user |
+| POST | `/api/v1/auth/register` | Create an account |
 | POST | `/api/v1/auth/login` | Log in and receive a JWT |
-| GET | `/api/v1/auth/me` | Get current user |
-| POST | `/api/v1/files` | Upload a file |
-| GET | `/api/v1/files` | List own files |
-| GET | `/api/v1/files/{file_id}/download` | Download own file |
-| DELETE | `/api/v1/files/{file_id}` | Delete own file |
+| GET | `/api/v1/auth/me` | Get the authenticated user |
+| POST | `/api/v1/files` | Upload a file (multipart field: `file`) |
+| GET | `/api/v1/files` | List the authenticated user's files |
+| GET | `/api/v1/files/{file_id}/download` | Download an owned file |
+| DELETE | `/api/v1/files/{file_id}` | Delete an owned file |
 | POST | `/api/v1/files/{file_id}/share` | Create a share link |
-| GET | `/api/v1/shares/{token}` | View shared file details |
-| GET | `/api/v1/shares/{token}/download` | Download shared file |
+| GET | `/api/v1/shares/{token}` | Read shared-file details |
+| GET | `/api/v1/shares/{token}/download` | Download using a valid share link |
 
-Uploads are limited to 50 MB by default. Configure `MAX_UPLOAD_SIZE_MB` in `backend/.env` to change the limit.
-
-## Run tests and lint
+## Run backend checks
 
 From `backend/` with the virtual environment active:
 
@@ -171,46 +196,48 @@ python -m pytest
 python -m ruff check .
 ```
 
-Tests use an in-memory SQLite database and a temporary uploads directory; PostgreSQL is not required for the test suite.
+The tests use an in-memory SQLite database and a temporary upload directory. They do not require the PostgreSQL container.
+
+The frontend CI build runs in GitHub Actions. You can also run it locally from `frontend/`:
+
+```bash
+npm ci
+npm run build
+```
 
 ## AWS S3 plan
 
-AWS is intended for cloud object storage, not as a requirement for the current local development phase.
+AWS S3 is the next storage implementation, not a requirement for local development.
 
-- Create one private S3 bucket when S3 integration begins.
+- Create a private S3 bucket in the chosen AWS Region.
 - Keep S3 Block Public Access enabled.
-- The FastAPI backend will use Boto3 to upload, download, and delete objects.
-- PostgreSQL will store the object key and file metadata, not the file contents.
-- The API will check ownership/share permissions before returning a short-lived presigned download URL.
-- Use an AWS CLI profile locally and an IAM role on AWS-hosted compute. Never hardcode or commit AWS access keys.
+- Add Boto3 to the backend when implementing the S3 adapter.
+- Store S3 object keys and metadata in PostgreSQL, not file bytes.
+- Check file ownership/share token validity in FastAPI before creating a short-lived presigned download URL.
+- Use an AWS CLI profile for local development and a least-privilege IAM role for workloads running on AWS.
+- Never hardcode or commit AWS access keys.
 
-No AWS bucket, Boto3 package, or cloud credentials are required for the current local MVP.
+No AWS account, bucket, SDK, or credentials are required for the current local MVP.
 
 ## Environment variables and secrets
 
-Copy `backend/.env.example` to `backend/.env`. Never commit the real `.env`, database passwords, JWT secrets, or AWS credentials. Replace the development JWT secret before deployment.
+Copy the example files:
 
-## Development roadmap
+- `backend/.env.example` → `backend/.env`
+- `frontend/.env.example` → `frontend/.env`
 
-| Step | Work |
-| --- | --- |
-| 1 | FastAPI starter and health endpoint |
-| 2 | PostgreSQL integration and database validation |
-| 3 | User registration/login and JWT authentication |
-| 4 | File upload, list, download, and delete |
-| 5 | Share links and protected downloads |
-| 6 | Connect the existing React frontend to the API |
-| 7 | Add Amazon S3 storage using Boto3 |
-| 8 | Containerize the complete application and validate deployment |
+Never commit real environment files, database passwords, JWT secrets or AWS credentials. Replace the development JWT secret before deployment.
+
+## Roadmap
+
+1. Complete frontend MVP integration and validate the complete user workflow.
+2. Add AWS S3 as an alternative storage backend.
+3. Improve share-link management and operational safeguards.
+4. Add Docker support for running the full application and prepare deployment.
 
 ## Team workflow
 
-- Work on `feature/python-fastapi-migration` or a separate feature branch, not directly on `main`.
-- Commit related changes with clear messages.
-- Push branches and use pull requests for review.
-- Coordinate API and database changes with frontend contributors.
-
-Current migration branch: `feature/python-fastapi-migration`.
+Work on `feature/python-fastapi-migration` or a dedicated feature branch. Keep `main` stable, commit related changes and use pull requests for review.
 
 ## License
 
