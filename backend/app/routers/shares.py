@@ -84,6 +84,7 @@ def get_shared_file(token: str, db: Session = Depends(get_db)) -> SharedFileResp
         original_name=record.original_name,
         content_type=record.content_type,
         size_bytes=record.size_bytes,
+        storage_backend=record.storage_backend,
         expires_at=share.expires_at,
     )
 
