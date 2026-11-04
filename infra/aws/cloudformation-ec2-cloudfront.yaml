@@ -14,6 +14,10 @@ Parameters:
     Type: String
     Default: cloudsync-your-unique-suffix
     Description: Existing private bucket used for CloudSync file objects.
+  CloudFrontOriginFacingPrefixListId:
+    Type: String
+    AllowedPattern: "^pl-[0-9a-f]+$"
+    Description: AWS-managed com.amazonaws.global.cloudfront.origin-facing prefix list ID in us-east-1. Retrieve with aws ec2 describe-managed-prefix-lists.
   InstanceType:
     Type: String
     Default: t3.small
@@ -48,7 +52,7 @@ Resources:
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
+          SourcePrefixListId: !Ref CloudFrontOriginFacingPrefixListId
       SecurityGroupEgress:
         - Description: Outbound access for package installation, GitHub, SSM, and AWS APIs
           IpProtocol: "-1"
