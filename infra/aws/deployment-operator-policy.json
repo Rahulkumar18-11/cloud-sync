@@ -37,7 +37,9 @@
         "ec2:AssociateAddress",
         "ec2:DisassociateAddress",
         "ec2:ReleaseAddress",
-        "ec2:ModifyInstanceAttribute"
+        "ec2:ModifyInstanceAttribute",
+        "ec2:CreateKeyPair",
+        "ec2:DeleteKeyPair"
       ],
       "Resource": "*"
     },
