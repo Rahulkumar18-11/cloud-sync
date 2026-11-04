@@ -1,8 +1,9 @@
 import uuid
+from tempfile import SpooledTemporaryFile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,15 @@ from app.db.session import get_db
 from app.dependencies import get_current_user
 from app.models import FileRecord, User
 from app.schemas import FileResponse as FileSchema
-from app.storage import local_file_path, remove_local_file
+from app.storage import (
+    StorageConfigurationError,
+    StorageError,
+    StorageUnavailable,
+    StoredFileNotFound,
+    delete_stored_file,
+    get_stored_file_response,
+    save_stored_file,
+)
 
 router = APIRouter(tags=["Files"])
 CHUNK_SIZE = 1024 * 1024
@@ -29,6 +38,13 @@ def get_owned_file(file_id: uuid.UUID, owner_id: uuid.UUID, db: Session) -> File
     return record
 
 
+def storage_http_exception(error: StorageError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=str(error),
+    )
+
+
 @router.post("", response_model=FileSchema, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
@@ -43,12 +59,11 @@ async def upload_file(
 
     file_id = uuid.uuid4()
     storage_key = f"{current_user.id}/{file_id.hex}"
-    destination = local_file_path(storage_key)
-    destination.parent.mkdir(parents=True, exist_ok=True)
     size_bytes = 0
+    storage_backend = settings.storage_backend
 
     try:
-        with destination.open("wb") as output:
+        with SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b") as temporary_file:
             while chunk := await file.read(CHUNK_SIZE):
                 size_bytes += len(chunk)
                 if size_bytes > max_size:
@@ -56,10 +71,19 @@ async def upload_file(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail=f"File exceeds the {settings.max_upload_size_mb} MB limit",
                     )
-                output.write(chunk)
-    except Exception:
-        destination.unlink(missing_ok=True)
+                temporary_file.write(chunk)
+
+            temporary_file.seek(0)
+            storage_backend = save_stored_file(
+                storage_key,
+                temporary_file,
+                content_type,
+                backend=storage_backend,
+            )
+    except HTTPException:
         raise
+    except StorageError as error:
+        raise storage_http_exception(error) from error
     finally:
         await file.close()
 
@@ -69,7 +93,7 @@ async def upload_file(
         storage_key=storage_key,
         content_type=content_type,
         size_bytes=size_bytes,
-        storage_backend="local",
+        storage_backend=storage_backend,
         owner_id=current_user.id,
     )
     try:
@@ -78,7 +102,11 @@ async def upload_file(
         db.refresh(record)
     except Exception:
         db.rollback()
-        destination.unlink(missing_ok=True)
+        try:
+            delete_stored_file(storage_key, storage_backend)
+        except StorageError:
+            # A failed cleanup can leave an orphaned object, but must not hide the DB error.
+            pass
         raise
     return record
 
@@ -101,16 +129,19 @@ def download_file(
     file_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     record = get_owned_file(file_id, current_user.id, db)
-    path = local_file_path(record.storage_key)
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
-    return FileResponse(
-        path=path,
-        media_type=record.content_type,
-        filename=record.original_name,
-    )
+    try:
+        return get_stored_file_response(
+            record.storage_key,
+            record.content_type,
+            record.original_name,
+            record.storage_backend,
+        )
+    except StoredFileNotFound as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except StorageError as error:
+        raise storage_http_exception(error) from error
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -120,7 +151,10 @@ def delete_file(
     db: Session = Depends(get_db),
 ) -> None:
     record = get_owned_file(file_id, current_user.id, db)
-    storage_key = record.storage_key
+    try:
+        delete_stored_file(record.storage_key, record.storage_backend)
+    except StorageError as error:
+        raise storage_http_exception(error) from error
+
     db.delete(record)
     db.commit()
-    remove_local_file(storage_key)
