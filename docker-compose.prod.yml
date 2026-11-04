@@ -27,7 +27,7 @@ services:
       APP_NAME: CloudSync API
       APP_ENV: production
       API_V1_PREFIX: /api/v1
-      CORS_ORIGINS: "*"
+      CORS_ORIGINS: ""
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@postgres:5432/cloudsync
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in the server .env file}
       JWT_ALGORITHM: HS256
