@@ -12,6 +12,7 @@ interface ApiSharedFile {
   original_name: string;
   content_type: string;
   size_bytes: number;
+  storage_backend: string;
   expires_at: string | null;
 }
 
@@ -21,7 +22,7 @@ function buildShareLink(token: string, fileId: string, fileName: string, expires
     fileId,
     fileName,
     token,
-    shareableUrl: `${window.location.origin}/shared/${token}`,
+    shareableUrl: `${(import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin).replace(/\\/$/, '')}/shared/${token}`,
     permission: 'DOWNLOAD',
     createdAt: new Date().toISOString(),
     expiresAt,
@@ -76,7 +77,7 @@ export const shareApi = {
       fileType: getFileTypeFromExtension(extension),
       extension,
       mimeType: data.content_type,
-      provider: 'LOCAL',
+      provider: data.storage_backend === 's3' ? 'AWS_S3' : 'LOCAL',
       createdAt: now,
       updatedAt: now,
       ownerId: '',
