@@ -1,6 +1,6 @@
+from app import models  # noqa: F401
 from app.db.base import Base
 from app.db.session import engine
-from app import models  # noqa: F401
 
 
 def initialize_database() -> None:
