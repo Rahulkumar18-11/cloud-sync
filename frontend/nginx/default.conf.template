@@ -3,10 +3,6 @@ map $http_x_cloudsync_origin_token $cloudsync_origin_allowed {
     "${ORIGIN_TOKEN}" 1;
 }
 
-map $http_cloudfront_forwarded_proto $cloudsync_forwarded_proto {
-    default $http_cloudfront_forwarded_proto;
-    "" $scheme;
-}
 
 server {
     listen 80;
@@ -26,7 +22,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $cloudsync_forwarded_proto;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_connect_timeout 30s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
