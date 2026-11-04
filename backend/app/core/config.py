@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,8 +17,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
-    # The first working storage implementation is local. S3 will be added later.
-    storage_backend: str = "local"
+    # Choose local disk for development or private Amazon S3 for cloud storage.
+    storage_backend: Literal["local", "s3"] = "local"
     upload_dir: str = "uploads"
     max_upload_size_mb: int = 50
     aws_region: str = "ap-south-1"
