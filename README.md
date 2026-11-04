@@ -218,7 +218,7 @@ The S3 adapter is implemented. To enable it, create a private S3 bucket, configu
 
 ```env
 STORAGE_BACKEND=s3
-AWS_REGION=ap-south-1
+AWS_REGION=us-east-1
 AWS_S3_BUCKET=YOUR_BUCKET_NAME
 ```
 
