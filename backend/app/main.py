@@ -2,13 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.routers import auth, files, shares
 
 settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
-    description="Backend API for the CloudSync multi-cloud file storage and sharing project.",
-    version="0.1.0",
+    description="API for the CloudSync file storage and sharing application.",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -18,6 +19,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth")
+app.include_router(files.router, prefix=f"{settings.api_v1_prefix}/files")
+app.include_router(shares.router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/", tags=["General"])
