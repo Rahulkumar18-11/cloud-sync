@@ -15,7 +15,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
-    allow_credentials=True,
+    # CloudSync uses bearer JWT headers, not cookie-based authentication.
+    # This permits both the local Vite origin and the single-origin CloudFront deployment.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
