@@ -11,11 +11,16 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     cors_origins: str = "http://localhost:5173"
 
-    # Reserved for the database and authentication implementation phases.
+    # Database and authentication settings for the upcoming implementation phases.
     database_url: str = "postgresql+psycopg://postgres:password@localhost:5432/cloudsync"
     jwt_secret_key: str = "development-only-change-this-secret"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+
+    # Local storage is the default; S3 support will be implemented in a later phase.
+    storage_backend: str = "local"
+    aws_region: str = "ap-south-1"
+    aws_s3_bucket: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
