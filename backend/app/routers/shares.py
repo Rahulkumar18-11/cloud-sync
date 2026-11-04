@@ -1,0 +1,106 @@
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.dependencies import get_current_user
+from app.models import FileRecord, ShareLink, User
+from app.schemas import CreateShareRequest, ShareLinkResponse, SharedFileResponse
+from app.storage import local_file_path
+
+router = APIRouter(tags=["File sharing"])
+
+
+def get_active_share(token: str, db: Session) -> ShareLink:
+    share = db.scalar(select(ShareLink).where(ShareLink.token == token))
+    if share is None or not share.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found")
+
+    expires_at = share.expires_at
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= expires_at:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link expired")
+    return share
+
+
+@router.post(
+    "/files/{file_id}/share",
+    response_model=ShareLinkResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_share_link(
+    file_id: str,
+    payload: CreateShareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ShareLinkResponse:
+    try:
+        import uuid
+
+        parsed_file_id = uuid.UUID(file_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from None
+
+    record = db.scalar(
+        select(FileRecord).where(
+            FileRecord.id == parsed_file_id,
+            FileRecord.owner_id == current_user.id,
+        )
+    )
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    expires_at = None
+    if payload.expires_in_hours is not None:
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours)
+
+    share = ShareLink(
+        file_id=record.id,
+        created_by=current_user.id,
+        token=secrets.token_urlsafe(32),
+        expires_at=expires_at,
+    )
+    db.add(share)
+    db.commit()
+    db.refresh(share)
+    return ShareLinkResponse(
+        token=share.token,
+        share_path=f"/api/v1/shares/{share.token}",
+        expires_at=share.expires_at,
+    )
+
+
+@router.get("/{token}", response_model=SharedFileResponse)
+def get_shared_file(token: str, db: Session = Depends(get_db)) -> SharedFileResponse:
+    share = get_active_share(token, db)
+    record = db.get(FileRecord, share.file_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared file not found")
+    return SharedFileResponse(
+        original_name=record.original_name,
+        content_type=record.content_type,
+        size_bytes=record.size_bytes,
+        expires_at=share.expires_at,
+    )
+
+
+@router.get("/{token}/download")
+def download_shared_file(token: str, db: Session = Depends(get_db)) -> FileResponse:
+    share = get_active_share(token, db)
+    record = db.get(FileRecord, share.file_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared file not found")
+    path = local_file_path(record.storage_key)
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
+    return FileResponse(
+        path=path,
+        media_type=record.content_type,
+        filename=record.original_name,
+    )
