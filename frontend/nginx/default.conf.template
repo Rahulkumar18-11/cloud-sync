@@ -1,0 +1,51 @@
+map $http_x_cloudsync_origin_token $cloudsync_origin_allowed {
+    default 0;
+    "\${ORIGIN_TOKEN}" 1;
+}
+
+map $http_cloudfront_forwarded_proto $cloudsync_forwarded_proto {
+    default $http_cloudfront_forwarded_proto;
+    "" $scheme;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    if ($cloudsync_origin_allowed = 0) {
+        return 403;
+    }
+
+    root /usr/share/nginx/html;
+    index index.html;
+    client_max_body_size 55m;
+
+    location /api/ {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $cloudsync_forwarded_proto;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+
+    location = /health {
+        proxy_pass http://backend:8000/health;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $cloudsync_forwarded_proto;
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+}
