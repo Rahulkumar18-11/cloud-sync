@@ -5,6 +5,7 @@
       "Sid": "CloudFormationStackLifecycle",
       "Effect": "Allow",
       "Action": [
+        "cloudformation:ValidateTemplate",
         "cloudformation:CreateStack",
         "cloudformation:DescribeStacks",
         "cloudformation:DescribeStackEvents",
@@ -51,8 +52,7 @@
         "iam:TagInstanceProfile",
         "iam:UntagInstanceProfile",
         "iam:AddRoleToInstanceProfile",
-        "iam:RemoveRoleFromInstanceProfile",
-        "iam:PassRole"
+        "iam:RemoveRoleFromInstanceProfile"
       ],
       "Resource": "*"
     },
