@@ -12,13 +12,13 @@ VALUES
 ON CONFLICT (email) DO NOTHING;
 
 -- Seed Storage Quota for Alex Rivera
-INSERT INTO storage_quotas (user_id, used_bytes, total_bytes, azure_used_bytes, gcp_used_bytes, files_count, folders_count)
+INSERT INTO storage_quotas (user_id, used_bytes, total_bytes, local_used_bytes, aws_s3_used_bytes, files_count, folders_count)
 VALUES (
   '22222222-2222-2222-2222-222222222222',
   254890000, 
   10737418240, 
-  160000000, 
-  94890000, 
+  254890000, 
+  0, 
   2, 
   1
 ) ON CONFLICT (user_id) DO NOTHING;
@@ -39,19 +39,19 @@ VALUES (
   'application/pdf',
   'pdf',
   2450000,
-  'AZURE',
+  'LOCAL',
   '33333333-3333-3333-3333-333333333333',
   '22222222-2222-2222-2222-222222222222'
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Seed Initial File Version
-INSERT INTO file_versions (id, file_id, version_number, size_bytes, cloud_path, is_current, created_by, notes)
+INSERT INTO file_versions (id, file_id, version_number, size_bytes, storage_key, is_current, created_by, notes)
 VALUES (
   '66666666-6666-6666-6666-666666666666',
   '44444444-4444-4444-4444-444444444444',
   1,
   2450000,
-  'azure/documents/Project_Architecture.pdf',
+  'local/documents/Project_Architecture.pdf',
   true,
   '22222222-2222-2222-2222-222222222222',
   'Initial upload'
@@ -67,11 +67,11 @@ INSERT INTO cloud_provider_configs (id, user_id, provider, account_email, contai
 VALUES (
   '77777777-7777-7777-7777-777777777777',
   '11111111-1111-1111-1111-111111111111',
-  'AZURE',
-  'azure-admin@cloudsync.io',
-  'cloudsync-primary-container',
-  true,
-  true
+  'AWS_S3',
+  NULL,
+  NULL,
+  false,
+  false
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Seed Sample Activity Log
@@ -82,9 +82,9 @@ VALUES (
   'Alex Rivera',
   'user@cloudsync.io',
   'UPLOAD_FILE',
-  'Uploaded Project_Architecture.pdf to Microsoft Azure',
+  'Uploaded Project_Architecture.pdf to local development storage',
   'Project_Architecture.pdf',
   '44444444-4444-4444-4444-444444444444',
-  'AZURE'
+  'LOCAL'
 ) ON CONFLICT (id) DO NOTHING;
 
