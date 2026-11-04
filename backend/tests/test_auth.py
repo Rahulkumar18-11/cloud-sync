@@ -34,7 +34,11 @@ def test_duplicate_email_is_rejected(client) -> None:
     register_user(client)
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": "Another Person", "email": "PERSON@example.com", "password": "strong-pass-123"},
+        json={
+            "name": "Another Person",
+            "email": "PERSON@example.com",
+            "password": "strong-pass-123",
+        },
     )
 
     assert response.status_code == 409
