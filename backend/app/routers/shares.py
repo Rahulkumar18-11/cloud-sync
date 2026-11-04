@@ -13,7 +13,6 @@ from app.models import FileRecord, ShareLink, User
 from app.schemas import CreateShareRequest, SharedFileResponse, ShareLinkResponse
 from app.storage import local_file_path
 
-
 router = APIRouter(tags=["File sharing"])
 
 
