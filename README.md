@@ -273,3 +273,14 @@ Work on `feature/python-fastapi-migration` or a dedicated feature branch. Keep `
 ## License
 
 This project is for academic and educational purposes.
+
+
+## Deploy publicly on AWS
+
+The repository includes a small-project AWS deployment using Docker Compose on EC2, the existing private S3 bucket for file objects, an EC2 IAM role for Boto3, and CloudFront for a public HTTPS app/share URL.
+
+See [infra/aws/README.md](infra/aws/README.md) for the cost notes, IAM prerequisites, CloudFormation deployment steps, Session Manager setup, server secrets, and verification checklist. The CloudFormation template is [infra/aws/cloudformation-ec2-cloudfront.yaml](infra/aws/cloudformation-ec2-cloudfront.yaml).
+
+The deployment uses one EC2 host for FastAPI, React/Nginx and PostgreSQL to keep the initial architecture and cost relatively simple. PostgreSQL's port is private to Docker; S3 remains private; CloudFront supplies the public HTTPS hostname. This is a demo/small-project setup with a single point of failure, not a high-availability production architecture.
+
+Before creating AWS resources, review the estimated ongoing charges in the deployment guide and set a budget alert. The current IAM application user needs temporary infrastructure-provisioning permissions to create the stack; the deployment guide includes a policy file for that one-time task. Remove that policy after the stack is created if you do not need to manage infrastructure further.
