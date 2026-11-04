@@ -1,17 +1,28 @@
 # CloudSync Python Backend
 
-This directory contains the Python replacement for the initial Java/Spring Boot backend.
-
-The API is built with FastAPI. File storage will work locally during development and will gain an Amazon S3 implementation in a later phase.
+The Python backend provides authentication, file management, and shareable download links. PostgreSQL stores metadata and local disk stores uploaded file contents during development. Amazon S3 will be added as a cloud storage backend after the local workflow is working.
 
 ## Requirements
 
-- Python 3.12+
-- Docker Desktop (for the PostgreSQL service in the repository root)
+- Python 3.12 or newer
+- Docker Desktop with Docker Compose
+- Git
 
-## Windows Git Bash setup
+## 1. Start PostgreSQL
 
-Run these commands from the repository root:
+Run from the repository root:
+
+```bash
+docker compose up -d postgres
+docker compose ps
+docker compose logs postgres --tail=30
+```
+
+Wait until the PostgreSQL container is healthy. The database schema is initialized automatically when PostgreSQL creates a fresh data volume.
+
+## 2. Set up the backend (Windows Git Bash)
+
+Run from the repository root:
 
 ```bash
 cd backend
@@ -20,68 +31,64 @@ source .venv/Scripts/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 cp .env.example .env
-uvicorn app.main:app --reload
 ```
 
-## Windows PowerShell setup
+If you already created the virtual environment and installed dependencies, pull the latest branch and run `pip install -r requirements.txt` again to install the newly added packages.
 
-```powershell
-cd backend
-py -3 -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-Copy-Item .env.example .env
-uvicorn app.main:app --reload
-```
+## 3. Run the API
 
-If PowerShell blocks virtual-environment activation, use Command Prompt:
-
-```cmd
-.venv\\Scripts\\activate.bat
-```
-
-## macOS / Linux setup
+From the `backend/` directory with `.venv` active:
 
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-## Verify the API
+Open:
 
 - API root: http://127.0.0.1:8000/
 - Health check: http://127.0.0.1:8000/health
-- Swagger documentation: http://127.0.0.1:8000/docs
+- Swagger API documentation: http://127.0.0.1:8000/docs
 
-The health endpoint currently checks that the API process responds. PostgreSQL connectivity and file operations are the next implementation steps.
+## 4. Available API routes
 
-## Run tests and lint
+| Method | Endpoint | Authentication | Purpose |
+| --- | --- | --- | --- |
+| POST | `/api/v1/auth/register` | No | Create an account |
+| POST | `/api/v1/auth/login` | No | Get a JWT access token |
+| GET | `/api/v1/auth/me` | Bearer token | Get the current user |
+| POST | `/api/v1/files` | Bearer token | Upload a file |
+| GET | `/api/v1/files` | Bearer token | List the current user's files |
+| GET | `/api/v1/files/{file_id}/download` | Bearer token | Download an owned file |
+| DELETE | `/api/v1/files/{file_id}` | Bearer token | Delete an owned file |
+| POST | `/api/v1/files/{file_id}/share` | Bearer token | Create a share link |
+| GET | `/api/v1/shares/{token}` | No | View shared file details |
+| GET | `/api/v1/shares/{token}/download` | No | Download using a valid share link |
 
-Run from the `backend/` directory with the virtual environment activated:
+Uploads are limited to 50 MB by default. Change `MAX_UPLOAD_SIZE_MB` in your local `.env` to adjust the limit.
+
+## 5. Test the backend
+
+From the `backend/` directory with the virtual environment active:
 
 ```bash
 python -m pytest
 python -m ruff check .
 ```
 
-## Storage configuration
+Tests use an isolated in-memory SQLite database and temporary file directory. They do not require the PostgreSQL container.
 
-The application will default to local file storage for development. Amazon S3 is the planned cloud object-storage target. When S3 support is implemented, the backend will use Boto3 and the AWS credential provider chain.
+## Storage and AWS
 
-Expected settings:
+The currently implemented storage backend is local disk (`backend/uploads/`, relative to the backend working directory). PostgreSQL stores the file's metadata and storage key.
 
-- `STORAGE_BACKEND=local` or `s3`
-- `AWS_REGION` for the bucket's AWS Region
-- `AWS_S3_BUCKET` for the bucket name
+Amazon S3 is the planned cloud object-storage backend. When that phase begins, the API will use Boto3 and a private S3 bucket. Local AWS credentials should be provided through the AWS CLI profile/credential chain; deployed AWS workloads should use a least-privilege IAM role. Do not place access keys in source code or commit them.
 
-No AWS credentials are needed for the current local starter. For local AWS development, use an AWS CLI profile or another supported Boto3 credential provider. On AWS-hosted compute, use an IAM role with only the required S3 permissions. Never hardcode or commit access keys.
+## Security notes
 
-## Environment variables
+- Passwords are stored as Argon2 hashes, never as plaintext.
+- Authenticated routes require a bearer JWT.
+- Users can only list, download, delete, or share files they own.
+- Share tokens are randomly generated and can expire.
+- The S3 bucket should remain private when S3 support is added.
+- Replace the development JWT secret before any deployment.
 
-Copy `.env.example` to `.env` and keep real secrets in `.env` only. Never commit database passwords, JWT secrets, AWS credentials, or other private configuration.
