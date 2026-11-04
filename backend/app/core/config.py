@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "s3"] = "local"
     upload_dir: str = "uploads"
     max_upload_size_mb: int = 50
-    aws_region: str = "ap-south-1"
+    aws_region: str = "us-east-1"
     aws_s3_bucket: str = ""
 
     model_config = SettingsConfigDict(
