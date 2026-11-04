@@ -60,3 +60,30 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+  deployment-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate CloudFormation template
+        run: |
+          python -m pip install --upgrade pip
+          pip install cfn-lint
+          cfn-lint infra/aws/cloudformation-ec2-cloudfront.yaml
+
+      - name: Build backend container
+        run: docker build -t cloudsync-api:ci ./backend
+
+      - name: Build frontend container
+        run: |
+          docker build -t cloudsync-web:ci \
+            --build-arg VITE_API_BASE_URL=/api/v1 \
+            --build-arg VITE_USE_MOCK_DATA=false \
+            ./frontend
