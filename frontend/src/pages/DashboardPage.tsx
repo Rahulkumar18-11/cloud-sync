@@ -1,247 +1,190 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, FilePlus2, FileQuestion, LayoutGrid, List, RefreshCw, Search, Share2, Trash2 } from 'lucide-react';
 import { useLayoutContext } from '../components/layout/Layout';
-import { useDebounce } from '../hooks/useDebounce';
-import { fileApi } from '../api/fileApi';
-import { folderApi } from '../api/folderApi';
-import { useToast } from '../hooks/useToast';
-import { FileItem, FolderItem, ViewMode, CloudProvider, FileType, BreadcrumbItem } from '../types/file';
-import { BreadcrumbNavigation } from '../components/explorer/BreadcrumbNavigation';
-import { FileGrid } from '../components/explorer/FileGrid';
-import { FileList } from '../components/explorer/FileList';
+import { CloudProviderBadge } from '../components/common/CloudProviderBadge';
+import { FileIcon } from '../components/common/FileIcon';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
-import { VersionHistoryModal } from '../components/file/VersionHistoryModal';
 import { ShareModal } from '../components/file/ShareModal';
-import { RenameModal } from '../components/explorer/RenameModal';
-import { MoveModal } from '../components/explorer/MoveModal';
-import { LayoutGrid, List, Filter, Cloud, FolderPlus, UploadCloud, FileQuestion } from 'lucide-react';
+import { useToast } from '../hooks/useToast';
+import { fileApi } from '../api/fileApi';
+import { FileItem, ViewMode } from '../types/file';
+import { formatBytes, formatRelativeTime } from '../utils/formatters';
 
 export const DashboardPage: React.FC = () => {
-  const { folderId } = useParams<{ folderId?: string }>();
-  const currentFolderId = folderId || null;
-
-  const { searchQuery, openUploadModal, openCreateFolderModal, refreshTrigger, triggerRefresh } = useLayoutContext();
-  const debouncedSearch = useDebounce(searchQuery, 300);
-
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [fileTypeFilter, setFileTypeFilter] = useState<FileType | 'all'>('all');
-  const [providerFilter, setProviderFilter] = useState<CloudProvider | 'all'>('all');
-
-  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const { searchQuery, openUploadModal, refreshTrigger } = useLayoutContext();
   const [files, setFiles] = useState<FileItem[]>([]);
-  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Modal active states
-  const [selectedVersionFile, setSelectedVersionFile] = useState<FileItem | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedShareFile, setSelectedShareFile] = useState<FileItem | null>(null);
-  const [selectedRenameFile, setSelectedRenameFile] = useState<FileItem | null>(null);
-  const [selectedMoveFile, setSelectedMoveFile] = useState<FileItem | null>(null);
-
   const toast = useToast();
 
-  const loadExplorerData = useCallback(async () => {
+  const loadFiles = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [fetchedFolders, fetchedFiles, fetchedCrumbs] = await Promise.all([
-        folderApi.getFolders(currentFolderId),
-        fileApi.getFiles({
-          folderId: currentFolderId,
-          search: debouncedSearch,
-          fileType: fileTypeFilter,
-          provider: providerFilter,
-        }),
-        folderApi.getBreadcrumbs(currentFolderId),
-      ]);
-
-      setFolders(fetchedFolders);
-      setFiles(fetchedFiles);
-      setBreadcrumbs(fetchedCrumbs);
-    } catch (err: any) {
-      toast.error('Failed to load explorer files', err.message);
+      setFiles(await fileApi.getFiles({ search: searchQuery }));
+    } catch (error) {
+      const message = (error as any)?.response?.data?.detail || (error as Error).message;
+      toast.error('Could not load your files', message || 'Check that the API is running.');
     } finally {
       setIsLoading(false);
     }
-  }, [currentFolderId, debouncedSearch, fileTypeFilter, providerFilter, toast]);
+  }, [searchQuery, toast]);
 
   useEffect(() => {
-    loadExplorerData();
-  }, [loadExplorerData, refreshTrigger]);
+    void loadFiles();
+  }, [loadFiles, refreshTrigger]);
+
+  const totalBytes = useMemo(() => files.reduce((total, file) => total + file.sizeBytes, 0), [files]);
 
   const handleDownload = async (file: FileItem) => {
-    toast.info('Downloading File', `Starting download for ${file.name}`);
-    await fileApi.downloadFile(file.id, file.name);
+    try {
+      await fileApi.downloadFile(file.id, file.name);
+      toast.success('Download started', file.name);
+    } catch (error) {
+      const message = (error as any)?.response?.data?.detail || (error as Error).message;
+      toast.error('Download failed', message);
+    }
   };
 
-  const handleDelete = async (id: string, isFolder: boolean) => {
-    if (!window.confirm(`Are you sure you want to delete this ${isFolder ? 'folder and its contents' : 'file'}?`)) return;
-
+  const handleDelete = async (file: FileItem) => {
+    if (!window.confirm(`Delete "${file.name}"? This cannot be undone.`)) return;
     try {
-      if (isFolder) {
-        await folderApi.deleteFolder(id);
-        toast.success('Folder Deleted', 'Folder removed successfully.');
-      } else {
-        await fileApi.deleteFile(id);
-        toast.success('File Deleted', 'File removed from cloud storage.');
-      }
-      triggerRefresh();
-    } catch (err: any) {
-      toast.error('Delete Failed', err.message);
+      await fileApi.deleteFile(file.id);
+      setFiles((current) => current.filter((item) => item.id !== file.id));
+      toast.success('File deleted', file.name);
+    } catch (error) {
+      const message = (error as any)?.response?.data?.detail || (error as Error).message;
+      toast.error('Delete failed', message);
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Top Header & Breadcrumbs Toolbar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-gray-100 dark:border-gray-800">
-        <BreadcrumbNavigation breadcrumbs={breadcrumbs} />
-
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* File Type Filter */}
-          <div className="relative">
-            <select
-              value={fileTypeFilter}
-              onChange={(e) => setFileTypeFilter(e.target.value as any)}
-              className="appearance-none pl-3 pr-8 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            >
-              <option value="all">All File Types</option>
-              <option value="pdf">PDF Documents</option>
-              <option value="doc">Word / Text</option>
-              <option value="spreadsheet">Spreadsheets</option>
-              <option value="image">Images</option>
-              <option value="video">Videos</option>
-              <option value="code">Code & JSON</option>
-            </select>
-            <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-          </div>
-
-          {/* Cloud Provider Filter */}
-          <div className="relative">
-            <select
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value as any)}
-              className="appearance-none pl-3 pr-8 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            >
-              <option value="all">All Cloud Providers</option>
-              <option value="AZURE">Microsoft Azure</option>
-              <option value="GCP">Google Cloud (GCP)</option>
-            </select>
-            <Cloud className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-          </div>
-
-          {/* Grid vs List View Mode Toggle */}
-          <div className="flex items-center bg-gray-200/70 dark:bg-gray-700/80 p-1 rounded-xl">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-white dark:bg-gray-800 text-brand-600 dark:text-brand-400 shadow-xs'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900'
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-all ${
-                viewMode === 'list'
-                  ? 'bg-white dark:bg-gray-800 text-brand-600 dark:text-brand-400 shadow-xs'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900'
-              }`}
-              title="List View"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-600 dark:text-brand-400">Your workspace</p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">My files</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {files.length} files · {formatBytes(totalBytes)} stored
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void loadFiles()}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </button>
+          <button
+            onClick={openUploadModal}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-brand-700"
+          >
+            <FilePlus2 className="h-4 w-4" /> Upload files
+          </button>
         </div>
       </div>
 
-      {/* Explorer Workspace Content */}
+      <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <Search className="h-4 w-4" />
+          {searchQuery ? `Results for "${searchQuery}"` : 'All files in your account'}
+        </div>
+        <div className="flex items-center rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+          <button
+            aria-label="Grid view"
+            onClick={() => setViewMode('grid')}
+            className={`rounded-md p-1.5 ${viewMode === 'grid' ? 'bg-white text-brand-600 shadow-sm dark:bg-gray-700' : 'text-gray-500'}`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+          <button
+            aria-label="List view"
+            onClick={() => setViewMode('list')}
+            className={`rounded-md p-1.5 ${viewMode === 'list' ? 'bg-white text-brand-600 shadow-sm dark:bg-gray-700' : 'text-gray-500'}`}
+          >
+            <List className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
       {isLoading ? (
-        <LoadingSpinner size="lg" label="Scanning cloud storage contents..." className="py-20" />
-      ) : folders.length === 0 && files.length === 0 ? (
-        /* Empty State */
-        <div className="text-center py-20 bg-white dark:bg-gray-800/50 rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-full bg-brand-50 dark:bg-brand-950/60 flex items-center justify-center text-brand-500">
-            <FileQuestion className="w-8 h-8" />
+        <LoadingSpinner size="lg" label="Loading your files..." className="py-20" />
+      ) : files.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center dark:border-gray-700 dark:bg-gray-800/60">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-400">
+            <FileQuestion className="h-8 w-8" />
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-              No files or folders found
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
-              {debouncedSearch || fileTypeFilter !== 'all' || providerFilter !== 'all'
-                ? 'Try adjusting your search query or filters to find what you are looking for.'
-                : 'Upload files or create folders to start organizing your multi-cloud storage.'}
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-3 pt-2">
-            <button
-              onClick={openCreateFolderModal}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50"
-            >
-              <FolderPlus className="w-4 h-4 text-amber-500" /> Create Folder
+          <h2 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
+            {searchQuery ? 'No matching files' : 'Your workspace is empty'}
+          </h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">
+            {searchQuery ? 'Try another search term.' : 'Upload your first file. It will be stored securely and linked to your account.'}
+          </p>
+          {!searchQuery && (
+            <button onClick={openUploadModal} className="mt-5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+              Upload your first file
             </button>
-            <button
-              onClick={openUploadModal}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-md"
-            >
-              <UploadCloud className="w-4 h-4" /> Upload File
-            </button>
-          </div>
+          )}
         </div>
       ) : viewMode === 'grid' ? (
-        <FileGrid
-          folders={folders}
-          files={files}
-          onDownload={handleDownload}
-          onShare={(file) => setSelectedShareFile(file)}
-          onVersionHistory={(file) => setSelectedVersionFile(file)}
-          onRename={(file) => setSelectedRenameFile(file)}
-          onMove={(file) => setSelectedMoveFile(file)}
-          onDelete={handleDelete}
-        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {files.map((file) => (
+            <article key={file.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-900">
+                    <FileIcon type={file.fileType} className="h-6 w-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white" title={file.name}>{file.name}</h3>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatBytes(file.sizeBytes)} · {formatRelativeTime(file.createdAt)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-700">
+                <CloudProviderBadge provider={file.provider} />
+                <div className="flex items-center gap-1">
+                  <button onClick={() => void handleDownload(file)} title="Download" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-gray-700">
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setSelectedShareFile(file)} title="Share" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-gray-700">
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => void handleDelete(file)} title="Delete" className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
       ) : (
-        <FileList
-          folders={folders}
-          files={files}
-          onDownload={handleDownload}
-          onShare={(file) => setSelectedShareFile(file)}
-          onVersionHistory={(file) => setSelectedVersionFile(file)}
-          onRename={(file) => setSelectedRenameFile(file)}
-          onMove={(file) => setSelectedMoveFile(file)}
-          onDelete={handleDelete}
-        />
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800">
+          <div className="grid grid-cols-[minmax(0,1fr)_130px_100px] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-900/60">
+            <span>Name</span><span>Storage</span><span className="text-right">Size</span>
+          </div>
+          {files.map((file) => (
+            <div key={file.id} className="grid grid-cols-[minmax(0,1fr)_130px_100px] items-center gap-3 border-b border-gray-100 px-4 py-3 last:border-0 dark:border-gray-700">
+              <div className="flex min-w-0 items-center gap-3">
+                <FileIcon type={file.fileType} className="h-5 w-5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{file.name}</p>
+                  <p className="text-xs text-gray-500">{formatRelativeTime(file.createdAt)}</p>
+                </div>
+              </div>
+              <CloudProviderBadge provider={file.provider} />
+              <div className="flex items-center justify-end gap-1">
+                <span className="mr-1 text-xs text-gray-500">{formatBytes(file.sizeBytes)}</span>
+                <button onClick={() => void handleDownload(file)} title="Download" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-gray-700"><Download className="h-4 w-4" /></button>
+                <button onClick={() => setSelectedShareFile(file)} title="Share" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-gray-700"><Share2 className="h-4 w-4" /></button>
+                <button onClick={() => void handleDelete(file)} title="Delete" className="rounded-lg p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"><Trash2 className="h-4 w-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Feature Modals */}
-      <VersionHistoryModal
-        isOpen={!!selectedVersionFile}
-        onClose={() => setSelectedVersionFile(null)}
-        file={selectedVersionFile}
-        onVersionRestored={triggerRefresh}
-      />
-
-      <ShareModal
-        isOpen={!!selectedShareFile}
-        onClose={() => setSelectedShareFile(null)}
-        file={selectedShareFile}
-      />
-
-      <RenameModal
-        isOpen={!!selectedRenameFile}
-        onClose={() => setSelectedRenameFile(null)}
-        file={selectedRenameFile}
-        onRenamed={triggerRefresh}
-      />
-
-      <MoveModal
-        isOpen={!!selectedMoveFile}
-        onClose={() => setSelectedMoveFile(null)}
-        file={selectedMoveFile}
-        onMoved={triggerRefresh}
-      />
+      <ShareModal isOpen={!!selectedShareFile} onClose={() => setSelectedShareFile(null)} file={selectedShareFile} />
     </div>
   );
 };
