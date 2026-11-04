@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,11 @@ from app.db.session import get_db
 from app.dependencies import get_current_user
 from app.models import FileRecord, ShareLink, User
 from app.schemas import CreateShareRequest, SharedFileResponse, ShareLinkResponse
-from app.storage import local_file_path
+from app.storage import (
+    StorageError,
+    StoredFileNotFound,
+    get_stored_file_response,
+)
 
 router = APIRouter(tags=["File sharing"])
 
@@ -85,16 +89,22 @@ def get_shared_file(token: str, db: Session = Depends(get_db)) -> SharedFileResp
 
 
 @router.get("/shares/{token}/download")
-def download_shared_file(token: str, db: Session = Depends(get_db)) -> FileResponse:
+def download_shared_file(token: str, db: Session = Depends(get_db)) -> Response:
     share = get_active_share(token, db)
     record = db.get(FileRecord, share.file_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared file not found")
-    path = local_file_path(record.storage_key)
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
-    return FileResponse(
-        path=path,
-        media_type=record.content_type,
-        filename=record.original_name,
-    )
+    try:
+        return get_stored_file_response(
+            record.storage_key,
+            record.content_type,
+            record.original_name,
+            record.storage_backend,
+        )
+    except StoredFileNotFound as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except StorageError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
