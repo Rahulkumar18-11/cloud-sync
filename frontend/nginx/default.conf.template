@@ -1,6 +1,6 @@
 map $http_x_cloudsync_origin_token $cloudsync_origin_allowed {
     default 0;
-    "\${ORIGIN_TOKEN}" 1;
+    "${ORIGIN_TOKEN}" 1;
 }
 
 map $http_cloudfront_forwarded_proto $cloudsync_forwarded_proto {
