@@ -37,8 +37,6 @@ services:
       MAX_UPLOAD_SIZE_MB: 50
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET:?Set AWS_S3_BUCKET in the server .env file}
-    volumes:
-      - backend_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,15 +65,13 @@ services:
         VITE_PUBLIC_APP_URL: ""
     container_name: cloudsync-web
     restart: unless-stopped
-    environment:
-      ORIGIN_TOKEN: ${ORIGIN_TOKEN:?Set ORIGIN_TOKEN in the server .env file}
     depends_on:
       backend:
         condition: service_healthy
     ports:
       - "80:80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --header='X-CloudSync-Origin-Token: ${ORIGIN_TOKEN}' -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 5
@@ -84,7 +80,6 @@ services:
 
 volumes:
   postgres_data:
-  backend_uploads:
 
 networks:
   cloudsync-internal:
