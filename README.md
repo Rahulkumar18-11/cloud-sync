@@ -275,12 +275,21 @@ Work on `feature/python-fastapi-migration` or a dedicated feature branch. Keep `
 This project is for academic and educational purposes.
 
 
-## Deploy publicly on AWS
 
-The repository includes a small-project AWS deployment using Docker Compose on EC2, the existing private S3 bucket for file objects, an EC2 IAM role for Boto3, and CloudFront for a public HTTPS app/share URL.
+## Deploy CloudSync publicly on AWS
 
-See [infra/aws/README.md](infra/aws/README.md) for the cost notes, IAM prerequisites, CloudFormation deployment steps, Session Manager setup, server secrets, and verification checklist. The CloudFormation template is [infra/aws/cloudformation-ec2-cloudfront.yaml](infra/aws/cloudformation-ec2-cloudfront.yaml).
+The simplest deployment is one EC2 instance running React, FastAPI and PostgreSQL with Docker Compose. The existing private S3 bucket stores uploaded file contents. An Elastic IP gives the server a stable public address, so new share links use the public IP rather than localhost.
 
-The deployment uses one EC2 host for FastAPI, React/Nginx and PostgreSQL to keep the initial architecture and cost relatively simple. PostgreSQL's port is private to Docker; S3 remains private; CloudFront supplies the public HTTPS hostname. This is a demo/small-project setup with a single point of failure, not a high-availability production architecture.
+Example public share link:
 
-Before creating AWS resources, review the estimated ongoing charges in the deployment guide and set a budget alert. The current IAM application user needs temporary infrastructure-provisioning permissions to create the stack; the deployment guide includes a policy file for that one-time task. Remove that policy after the stack is created if you do not need to manage infrastructure further.
+```text
+http://YOUR_ELASTIC_IP/shared/<token>
+```
+
+No CloudFront, RDS, load balancer, domain or separate frontend host is required for this demo.
+
+Follow [infra/aws/README.md](infra/aws/README.md). It covers the one-time IAM permission, SSH key, VPC/subnet selection, CloudFormation stack, server environment file and Docker startup.
+
+**Security:** this first deployment uses HTTP to keep it simple. Use it only for a demo with test data. Do not upload confidential files or reuse passwords until HTTPS is added; HTTP does not encrypt login or file traffic.
+
+**Cost:** a t3.small in us-east-1 plus a public IPv4 address is roughly $19/month before EBS, S3, data transfer and tax. Check AWS pricing and your account's credits/free-tier eligibility before creating the instance. Stop or delete the server when you do not need the public app. Back up PostgreSQL before deleting the CloudFormation stack; the separate S3 bucket and its objects are not deleted by the stack.
