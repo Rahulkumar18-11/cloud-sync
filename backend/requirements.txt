@@ -15,6 +15,9 @@ psycopg[binary]>=3.2,<4.0
 PyJWT>=2.9,<3.0
 pwdlib[argon2]>=0.2,<1.0
 
+# AWS S3 storage
+boto3>=1.35,<2.0
+
 # Multipart uploads
 python-multipart>=0.0.9
 
