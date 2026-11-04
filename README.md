@@ -68,6 +68,16 @@ PostgreSQL stores user accounts, file ownership, names, content types, sizes, st
 
 S3 objects are not public. FastAPI verifies the authenticated owner or share token and streams the file from S3 to the client. The frontend uses the same endpoints in local and S3 mode.
 
+### How share links work
+
+A CloudSync share URL is an application URL, not an S3 object URL. For example, `https://cloudsync.example.com/shared/<token>` opens the React shared-file page. That page asks FastAPI to validate the token and file expiry; when the recipient downloads, FastAPI reads the private object from S3 (or local disk) and streams it to the recipient.
+
+When running locally, the generated link uses `http://localhost:5173` because that is the frontend's current origin. That address works only on the computer running the Vite development server. It is not a public link and cannot be opened by another person on the internet.
+
+Set `VITE_PUBLIC_APP_URL` in `frontend/.env` to the deployed frontend's public HTTPS URL when the frontend is hosted. Also set `VITE_API_BASE_URL` to the deployed FastAPI public HTTPS base URL, including `/api/v1`. These Vite variables are embedded at build/start time, so rebuild or restart the frontend after changing them. A public share link is usable by other people only after both the frontend and API are reachable from the internet and the API can reach PostgreSQL and S3.
+
+For a local demonstration, a temporary HTTPS tunnel can expose both frontend and backend, but the frontend's API base URL and backend CORS allow-list must point to the tunnel URLs. Do not use localhost as a recipient-facing URL.
+
 ## Repository structure
 
 ```text
@@ -163,7 +173,7 @@ npm run dev
 
 Open http://localhost:5173.
 
-The frontend environment file points to `http://127.0.0.1:8000/api/v1` and disables mock mode. Keep real `.env` files local; do not commit them.
+The frontend environment file points to `http://127.0.0.1:8000/api/v1`, disables mock mode, and sets `VITE_PUBLIC_APP_URL=http://localhost:5173` for local share links. Keep real `.env` files local; do not commit them.
 
 ## Use the application
 
