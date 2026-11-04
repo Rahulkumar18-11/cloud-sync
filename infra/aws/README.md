@@ -26,8 +26,8 @@ This is a compact demo deployment: one EC2 host is a single point of failure. Fo
 1. The existing private S3 bucket, cloudsync-your-unique-suffix, in us-east-1.
 2. The S3 object IAM policy already tested with the local IAM user.
 3. A VPC and a public subnet in the same VPC. The subnet must have a route to an Internet Gateway and auto-assign public IPv4 enabled.
-4. Your IAM deployment identity must be permitted to create CloudFormation stacks, EC2 security groups/instances, IAM roles and instance profiles, pass the EC2 role to EC2, and create CloudFront distributions. The stack creates a named IAM role, so CloudFormation requires CAPABILITY_NAMED_IAM.
-5. AWS Systems Manager Session Manager access for your IAM identity. Do not open port 22 or use root credentials for the application.
+4. Your IAM deployment identity must temporarily receive the permissions in infra/aws/deployment-operator-policy.json. An administrator must attach this customer-managed policy to cloudsync-local-dev (or another deployment operator). It permits the stack to create EC2, its scoped instance role, and CloudFront; it does not grant administrator access to the AWS account.
+5. After the stack is created, attach infra/aws/session-manager-access-policy.json to the operator and detach CloudSyncDeploymentProvisioner. Keep the existing CloudSyncS3ObjectAccess policy if you still use the CLI to test S3. To update/delete the stack later, temporarily reattach the deployment policy. Do not open port 22 or use root credentials for the application.
 
 ## 1. Create the stack
 
@@ -40,7 +40,7 @@ This is a compact demo deployment: one EC2 host is a single point of failure. Fo
 7. Keep instance type t3.small for the starting configuration.
 8. Generate a random 48-character alphanumeric value for OriginToken. Save it in a password manager; it is used by CloudFront to authenticate to Nginx.
 9. Keep the repository URL and migration branch defaults unless you intentionally deploy a different branch.
-10. Acknowledge CAPABILITY_NAMED_IAM when prompted and create the stack.
+10. Acknowledge CAPABILITY_NAMED_IAM when prompted and create the stack. If the console asks for an execution capability, choose the option that acknowledges named IAM resources.
 11. Wait until the stack reaches CREATE_COMPLETE. The EC2 user data installs Docker/Compose and clones the selected branch. CloudFront can take additional time to finish deploying.
 
 The template does not ask for AWS access keys and does not place database/JWT secrets in EC2 user data.
@@ -89,9 +89,12 @@ Replace the four placeholder values before saving. Do not commit this file or pa
 
 ## 4. Start the application
 
-From /opt/cloudsync:
+Build the images one at a time to reduce peak memory use on the small EC2 instance, then start the stack:
 
-    docker compose -f docker-compose.prod.yml up -d --build
+    cd /opt/cloudsync
+    docker compose -f docker-compose.prod.yml build backend
+    docker compose -f docker-compose.prod.yml build web
+    docker compose -f docker-compose.prod.yml up -d
     docker compose -f docker-compose.prod.yml ps
     docker compose -f docker-compose.prod.yml logs --tail=100
 
