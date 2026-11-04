@@ -60,6 +60,7 @@ Resources:
   CloudSyncEC2Role:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: cloudsync-ec2-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
