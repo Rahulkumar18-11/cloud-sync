@@ -99,10 +99,14 @@ jobs:
             --build-arg VITE_USE_MOCK_DATA=false \
             ./frontend
 
+          docker network create cloudsync-smoke
+          docker run -d --name cloudsync-backend-smoke \
+            --network cloudsync-smoke --network-alias backend \
+            nginx:1.27-alpine
           docker run -d --name cloudsync-web-smoke \
-            -p 127.0.0.1:8080:80 \
+            --network cloudsync-smoke -p 127.0.0.1:8080:80 \
             cloudsync-web:ci
-          trap 'docker rm -f cloudsync-web-smoke >/dev/null 2>&1 || true' EXIT
+          trap 'docker rm -f cloudsync-web-smoke cloudsync-backend-smoke >/dev/null 2>&1 || true; docker network rm cloudsync-smoke >/dev/null 2>&1 || true' EXIT
 
           for attempt in $(seq 1 20); do
             if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
