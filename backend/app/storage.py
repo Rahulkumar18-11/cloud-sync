@@ -1,8 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
 from shutil import copyfileobj
-from urllib.parse import quote
 from typing import BinaryIO
+from urllib.parse import quote
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -80,15 +80,16 @@ def save_stored_file(
 
     bucket = _s3_bucket()
     try:
-        get_s3_client().upload_fileobj(
-            file_obj,
-            bucket,
-            storage_key,
-            ExtraArgs={"ContentType": content_type},
+        get_s3_client().put_object(
+            Bucket=bucket,
+            Key=storage_key,
+            Body=file_obj,
+            ContentType=content_type,
         )
-    except (BotoCoreError, ClientError, Exception) as error:
-        # Boto3 managed transfers can raise both botocore and boto3 transfer exceptions.
-        raise StorageUnavailable("Amazon S3 upload failed. Check AWS credentials and bucket permissions.") from error
+    except (BotoCoreError, ClientError) as error:
+        raise StorageUnavailable(
+            "Amazon S3 upload failed. Check AWS credentials and bucket permissions."
+        ) from error
     return selected
 
 
