@@ -15,7 +15,7 @@ The backend is **Python/FastAPI** with **PostgreSQL** for metadata. The existing
 | React login, registration, file dashboard and shared-file page | Connected to FastAPI |
 | PostgreSQL persistence | Implemented |
 | Local file storage | Implemented |
-| Amazon S3 storage | Planned |
+| Amazon S3 storage | Implemented; requires a private bucket and IAM credentials |
 | Folders, file versions, activity logs and admin tools | Outside the current MVP |
 
 The upload limit is 50 MB per file by default. It can be changed with `MAX_UPLOAD_SIZE_MB` in `backend/.env`.
@@ -28,8 +28,8 @@ The upload limit is 50 MB per file by default. It can be changed with `MAX_UPLOA
 | Validation/configuration | Pydantic, pydantic-settings |
 | Database | PostgreSQL 16, SQLAlchemy 2.x, Psycopg 3 |
 | Authentication | JWT (PyJWT), Argon2 password hashing (pwdlib) |
-| Current file storage | Local disk under `backend/uploads/` |
-| Planned cloud storage | Amazon S3 using Boto3 |
+| File storage | Local disk or private Amazon S3 using Boto3 |
+| Cloud storage | Amazon S3 using Boto3 |
 | Frontend | React, TypeScript, Vite, Tailwind CSS |
 | Frontend HTTP client | Axios |
 | Tests and quality | pytest, HTTPX, Ruff |
@@ -52,7 +52,7 @@ PostgreSQL   Local disk
 (metadata)   (file contents)
 ```
 
-### Planned AWS storage
+### AWS S3 storage (implemented)
 
 ```text
 React + TypeScript
@@ -65,7 +65,7 @@ PostgreSQL   Amazon S3
 (metadata)   (file contents)
 ```
 
-PostgreSQL stores user accounts, ownership, file metadata, storage keys and share links. File contents remain on local disk until the S3 storage adapter is implemented. The future S3 bucket will be private; public sharing will be authorized by the API before a short-lived download is provided.
+PostgreSQL stores user accounts, ownership, file metadata, storage keys and share links. The storage adapter supports local disk and private Amazon S3. Each file record remembers its storage backend, so switching the default affects new uploads without breaking downloads for existing local files. When a file is in S3, FastAPI checks ownership or share-token validity and streams the object; the bucket remains private.
 
 ## Repository structure
 
@@ -231,9 +231,9 @@ Never commit real environment files, database passwords, JWT secrets or AWS cred
 ## Roadmap
 
 1. Complete frontend MVP integration and validate the complete user workflow.
-2. Add AWS S3 as an alternative storage backend.
-3. Improve share-link management and operational safeguards.
-4. Add Docker support for running the full application and prepare deployment.
+2. Configure and verify the private S3 bucket and least-privilege IAM identity.
+3. Add operational safeguards such as share-link revocation, cleanup handling and stronger upload validation.
+4. Containerize the full application and prepare deployment.
 
 ## Team workflow
 
