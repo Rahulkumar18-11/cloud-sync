@@ -35,6 +35,7 @@ def test_upload_list_download_share_and_delete(client) -> None:
     shared_metadata = client.get(f"/api/v1/shares/{share_token}")
     assert shared_metadata.status_code == 200
     assert shared_metadata.json()["original_name"] == "hello.txt"
+    assert shared_metadata.json()["storage_backend"] == "local"
 
     shared_download = client.get(f"/api/v1/shares/{share_token}/download")
     assert shared_download.status_code == 200
@@ -136,6 +137,9 @@ def test_s3_storage_backend_upload_share_download_and_delete(client, monkeypatch
     shared_download = client.get(f"/api/v1/shares/{share_token}/download")
     assert shared_download.status_code == 200
     assert shared_download.content == b"Stored in the S3 adapter"
+    shared_metadata = client.get(f"/api/v1/shares/{share_token}")
+    assert shared_metadata.status_code == 200
+    assert shared_metadata.json()["storage_backend"] == "s3"
 
     deletion = client.delete(f"/api/v1/files/{file_data['id']}", headers=headers)
     assert deletion.status_code == 204
