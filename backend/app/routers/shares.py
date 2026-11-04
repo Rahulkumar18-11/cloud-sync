@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -35,21 +36,14 @@ def get_active_share(token: str, db: Session) -> ShareLink:
     status_code=status.HTTP_201_CREATED,
 )
 def create_share_link(
-    file_id: str,
+    file_id: uuid.UUID,
     payload: CreateShareRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ShareLinkResponse:
-    try:
-        import uuid
-
-        parsed_file_id = uuid.UUID(file_id)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from None
-
     record = db.scalar(
         select(FileRecord).where(
-            FileRecord.id == parsed_file_id,
+            FileRecord.id == file_id,
             FileRecord.owner_id == current_user.id,
         )
     )
@@ -76,7 +70,7 @@ def create_share_link(
     )
 
 
-@router.get("/{token}", response_model=SharedFileResponse)
+@router.get("/shares/{token}", response_model=SharedFileResponse)
 def get_shared_file(token: str, db: Session = Depends(get_db)) -> SharedFileResponse:
     share = get_active_share(token, db)
     record = db.get(FileRecord, share.file_id)
@@ -90,7 +84,7 @@ def get_shared_file(token: str, db: Session = Depends(get_db)) -> SharedFileResp
     )
 
 
-@router.get("/{token}/download")
+@router.get("/shares/{token}/download")
 def download_shared_file(token: str, db: Session = Depends(get_db)) -> FileResponse:
     share = get_active_share(token, db)
     record = db.get(FileRecord, share.file_id)
