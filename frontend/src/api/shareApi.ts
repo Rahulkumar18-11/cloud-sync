@@ -17,12 +17,17 @@ interface ApiSharedFile {
 }
 
 function buildShareLink(token: string, fileId: string, fileName: string, expiresAt: string | null): ShareLink {
+  const publicAppUrl = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+  const normalizedAppUrl = publicAppUrl.endsWith('/')
+    ? publicAppUrl.slice(0, -1)
+    : publicAppUrl;
+
   return {
     id: token,
     fileId,
     fileName,
     token,
-    shareableUrl: `${(import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin).replace(/\\/$/, '')}/shared/${token}`,
+    shareableUrl: `${normalizedAppUrl}/shared/${token}`,
     permission: 'DOWNLOAD',
     createdAt: new Date().toISOString(),
     expiresAt,
