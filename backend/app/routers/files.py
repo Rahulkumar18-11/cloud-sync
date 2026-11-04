@@ -1,6 +1,6 @@
 import uuid
-from tempfile import SpooledTemporaryFile
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -13,9 +13,7 @@ from app.dependencies import get_current_user
 from app.models import FileRecord, User
 from app.schemas import FileResponse as FileSchema
 from app.storage import (
-    StorageConfigurationError,
     StorageError,
-    StorageUnavailable,
     StoredFileNotFound,
     delete_stored_file,
     get_stored_file_response,
