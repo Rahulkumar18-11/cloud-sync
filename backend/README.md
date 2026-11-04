@@ -87,7 +87,7 @@ The S3 adapter is implemented using Boto3. PostgreSQL records which backend stor
 
 ```env
 STORAGE_BACKEND=s3
-AWS_REGION=ap-south-1
+AWS_REGION=us-east-1
 AWS_S3_BUCKET=YOUR_BUCKET_NAME
 ```
 
