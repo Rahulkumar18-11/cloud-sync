@@ -81,7 +81,7 @@ Resources:
                   - s3:PutObject
                   - s3:GetObject
                   - s3:DeleteObject
-                Resource: !Sub arn:\${AWS::Partition}:s3:::\${S3BucketName}/*
+                Resource: !Sub arn:${AWS::Partition}:s3:::${S3BucketName}/*
       Tags:
         - Key: Name
           Value: cloudsync-ec2-role
@@ -95,7 +95,7 @@ Resources:
   CloudSyncInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Sub "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}"
+      ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}"
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref CloudSyncInstanceProfile
       MetadataOptions:
@@ -138,8 +138,6 @@ Resources:
 
   CloudSyncCloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
-    DependsOn:
-      - CloudSyncInstance
     Properties:
       DistributionConfig:
         Enabled: true
