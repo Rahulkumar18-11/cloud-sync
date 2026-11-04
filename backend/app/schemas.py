@@ -54,4 +54,5 @@ class SharedFileResponse(BaseModel):
     original_name: str
     content_type: str
     size_bytes: int
+    storage_backend: str
     expires_at: datetime | None
