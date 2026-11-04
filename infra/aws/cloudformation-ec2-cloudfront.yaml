@@ -126,7 +126,7 @@ Resources:
           curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
           chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
           mkdir -p /opt/cloudsync
-          git clone --depth 1 --branch \${GitBranch} \${GitRepositoryUrl} /opt/cloudsync
+          git clone --depth 1 --branch ${GitBranch} ${GitRepositoryUrl} /opt/cloudsync
           chown -R ec2-user:ec2-user /opt/cloudsync
           echo "CloudSync files are in /opt/cloudsync. Create the server .env file before starting docker compose." > /opt/cloudsync/DEPLOYMENT-READY.txt
           chown ec2-user:ec2-user /opt/cloudsync/DEPLOYMENT-READY.txt
@@ -183,7 +183,7 @@ Resources:
 Outputs:
   PublicApplicationUrl:
     Description: Public HTTPS URL for CloudSync and share links.
-    Value: !Sub https://\${CloudSyncCloudFrontDistribution.DomainName}
+    Value: !Sub https://${CloudSyncCloudFrontDistribution.DomainName}
   CloudFrontDomainName:
     Description: CloudFront domain used by public share links.
     Value: !GetAtt CloudSyncCloudFrontDistribution.DomainName
