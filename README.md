@@ -1,120 +1,128 @@
 # CloudSync
 
-CloudSync is a simple file storage and sharing application. Users will be able to upload files, view their files, download them, and share them through links.
+CloudSync is a straightforward file storage and sharing application. Users can register, upload files, view and download their files, delete them, and share them through expiring links.
 
-The backend is being moved from Java/Spring Boot to **Python/FastAPI**. The existing React frontend is being retained, and PostgreSQL will store application metadata.
+The application uses **Python/FastAPI**, **PostgreSQL**, and an existing **React + TypeScript** frontend. Files can be stored on local disk or in a private **Amazon S3** bucket.
 
-**Cloud storage direction:** use **Amazon S3** for cloud file storage. During local development, files can be stored on the local filesystem so the project works without an AWS account, AWS credentials, or cloud charges. The storage layer will support switching to S3 when that integration is implemented.
+## Current MVP status
 
-## Current progress
-
-| Component | Status |
+| Feature | Status |
 | --- | --- |
-| React frontend | Existing UI is in the repository; it currently uses mock data by default. |
-| PostgreSQL | Docker Compose service and schema are available; Python database integration is next. |
-| Python backend | FastAPI starter app and health endpoint are working. |
-| Local file storage | Planned as the first storage implementation for local development. |
-| Amazon S3 | Target cloud object storage; integration will follow the basic local file workflow. |
-| File sharing | To be implemented using shareable links/tokens. |
+| Registration and login | Implemented |
+| Argon2 password hashing and JWT authentication | Implemented |
+| File upload, list, download and delete | Implemented |
+| Share links with optional expiry | Implemented |
+| React login, registration and file dashboard | Connected to FastAPI |
+| Public shared-file page and download | Connected to FastAPI |
+| PostgreSQL metadata persistence | Implemented |
+| Local file storage | Implemented and default |
+| Amazon S3 storage using Boto3 | Implemented; requires bucket and IAM profile configuration |
+| Folder management, versions, admin and activity screens | Outside the current MVP |
 
-**Scope:** build a small working project first. We are not implementing microservices, Kubernetes, background workers, complex admin dashboards, or advanced analytics.
+The upload limit is 50 MB per file by default. Configure `MAX_UPLOAD_SIZE_MB` in `backend/.env` to change it.
 
 ## Technology stack
 
-| Part | Technology |
+| Layer | Technology |
 | --- | --- |
-| Backend language | Python 3.12+ |
-| API framework | FastAPI |
-| API server | Uvicorn |
-| Request validation | Pydantic |
-| Database | PostgreSQL 16 |
-| ORM / database access | SQLAlchemy 2.x |
-| PostgreSQL driver | Psycopg 3 |
-| Database migrations | Alembic |
-| Authentication (planned) | JWT and Argon2 password hashing |
-| File upload handling | FastAPI UploadFile and python-multipart |
-| Local storage | Local `backend/uploads/` directory (development) |
-| Cloud object storage | Amazon S3 (planned) |
-| AWS SDK | Boto3 (to be added with the S3 implementation) |
-| Frontend | Existing React + TypeScript + Vite |
-| Testing | pytest and HTTPX |
-| Code quality | Ruff |
-| Containers | Docker Compose |
-| CI | GitHub Actions |
-
-## MVP features
-
-The first working version will focus on:
-
-1. Upload a file.
-2. List uploaded files.
-3. Download a file.
-4. Delete a file.
-5. Generate a share link for a file.
-6. Open a share link and download the shared file.
-
-Basic user authentication and ownership checks will be added so one user cannot access another user's private files.
+| Backend | Python, FastAPI, Uvicorn |
+| Validation/configuration | Pydantic, pydantic-settings |
+| Database | PostgreSQL 16, SQLAlchemy 2.x, Psycopg 3 |
+| Authentication | JWT (PyJWT), Argon2 (pwdlib) |
+| Storage | Local disk or private Amazon S3 (Boto3) |
+| Frontend | React, TypeScript, Vite, Tailwind CSS |
+| HTTP client | Axios |
+| Testing and quality | pytest, HTTPX, Ruff |
+| Local database | Docker Compose |
+| CI | GitHub Actions: backend tests/lint and frontend build |
 
 ## Architecture
 
-### Local development
+### Local mode (default)
 
 ```text
-React + TypeScript frontend
-          |
-          | HTTP requests
-          v
-Python FastAPI backend
-       |          |
-       v          v
- PostgreSQL   Local file storage
- (metadata)   (file contents)
+React + TypeScript
+       | HTTP / JWT
+       v
+Python FastAPI
+   |          |
+   v          v
+PostgreSQL   Local disk
+(metadata)   (file contents)
 ```
 
-### AWS storage target
+### S3 mode
 
 ```text
-React + TypeScript frontend
-          |
-          | HTTP requests
-          v
-Python FastAPI backend
-       |          |
-       v          v
- PostgreSQL   Amazon S3
- (metadata)   (file contents)
+React + TypeScript
+       | HTTP / JWT
+       v
+Python FastAPI
+   |          |
+   v          v
+PostgreSQL   Private Amazon S3
+(metadata)   (file contents)
 ```
 
-PostgreSQL stores users, file metadata, ownership, storage keys, and share-link records. File contents are stored locally during the first development phase and in an S3 bucket when AWS storage is enabled. The backend will handle file access; the bucket should not be made public just to support sharing.
+PostgreSQL stores user accounts, file ownership, names, content types, sizes, storage keys, backend selection and share-link records. Each file row remembers whether its bytes live in local disk or S3. Changing `STORAGE_BACKEND` affects new uploads; it does not move existing files.
+
+S3 objects are not public. FastAPI verifies the authenticated owner or share token and streams the file from S3 to the client. The frontend uses the same endpoints in local and S3 mode.
+
+### How share links work
+
+A CloudSync share URL is an application URL, not an S3 object URL. For example, `https://cloudsync.example.com/shared/<token>` opens the React shared-file page. That page asks FastAPI to validate the token and file expiry; when the recipient downloads, FastAPI reads the private object from S3 (or local disk) and streams it to the recipient.
+
+When running locally, the generated link uses `http://localhost:5173` because that is the frontend's current origin. That address works only on the computer running the Vite development server. It is not a public link and cannot be opened by another person on the internet.
+
+Set `VITE_PUBLIC_APP_URL` in `frontend/.env` to the deployed frontend's public HTTPS URL when the frontend is hosted. Also set `VITE_API_BASE_URL` to the deployed FastAPI public HTTPS base URL, including `/api/v1`. These Vite variables are embedded at build/start time, so rebuild or restart the frontend after changing them. A public share link is usable by other people only after both the frontend and API are reachable from the internet and the API can reach PostgreSQL and S3.
+
+For a local demonstration, a temporary HTTPS tunnel can expose both frontend and backend, but the frontend's API base URL and backend CORS allow-list must point to the tunnel URLs. Do not use localhost as a recipient-facing URL.
 
 ## Repository structure
-
-The Python backend is being added under `backend/`. The old Java scaffold is being left in place temporarily so the team can migrate without disrupting the shared repository.
 
 ```text
 cloud-sync/
 ├── backend/
 │   ├── app/
 │   │   ├── core/
-│   │   │   └── config.py
-│   │   └── main.py
+│   │   ├── db/
+│   │   ├── routers/
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── security.py
+│   │   └── storage.py
 │   ├── tests/
-│   │   └── test_health.py
 │   ├── requirements.txt
-│   ├── pyproject.toml
 │   └── .env.example
 ├── database/
 │   ├── schema.sql
 │   └── seed.sql
-├── frontend/
 ├── docs/
+│   └── aws-s3-setup.md
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── .env.example
 ├── docker-compose.yml
 └── README.md
 ```
 
-## Run the project locally
+## Run locally (Windows Git Bash)
 
-### 1. Clone the repository
+Use two terminals: one for the backend and one for the frontend. Keep Docker Desktop running.
+
+### 1. Get the migration branch
+
+For an existing clone:
+
+```bash
+cd ~/Desktop/cloud-sync
+git switch feature/python-fastapi-migration
+git pull origin feature/python-fastapi-migration
+```
+
+For a fresh clone:
 
 ```bash
 git clone -b feature/python-fastapi-migration https://github.com/Rahulkumar18-11/cloud-sync.git
@@ -130,11 +138,9 @@ docker compose up -d postgres
 docker compose ps
 ```
 
-The database scripts are automatically applied when Docker initializes a fresh PostgreSQL data volume. Do not re-run `database/schema.sql` on a database containing data: it contains DROP TABLE statements and is intended only for a fresh development database.
+Wait until PostgreSQL is healthy.
 
-### 3. Set up and run the Python backend
-
-From the repository root, on Windows Git Bash:
+### 3. Configure and start the backend (Terminal 1)
 
 ```bash
 cd backend
@@ -143,105 +149,147 @@ source .venv/Scripts/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 cp .env.example .env
+python -m app.db.init_db
 uvicorn app.main:app --reload
 ```
 
-On Windows PowerShell:
+For an existing setup, activate the existing `.venv` and run `pip install -r requirements.txt` after pulling updates. The database initializer creates missing tables without dropping existing data.
 
-```powershell
-cd backend
-py -3 -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-Copy-Item .env.example .env
-uvicorn app.main:app --reload
-```
+Backend URLs:
 
-On macOS / Linux:
+- Swagger: http://127.0.0.1:8000/docs
+- Health check: http://127.0.0.1:8000/health
+
+### 4. Configure and start the frontend (Terminal 2)
+
+From the repository root in a second Git Bash terminal:
 
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+cd ~/Desktop/cloud-sync/frontend
 cp .env.example .env
-uvicorn app.main:app --reload
-```
-
-The backend will run at `http://127.0.0.1:8000`.
-
-- API status: http://127.0.0.1:8000/health
-- Interactive API docs: http://127.0.0.1:8000/docs
-
-At this stage, the health endpoint checks that the API is running. PostgreSQL connectivity and file operations are the next development steps.
-
-### 4. Run the existing frontend
-
-Open another terminal:
-
-```bash
-cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-The frontend normally runs at http://localhost:5173. It will continue using mock data until the corresponding Python API endpoints are ready. Do not turn mock mode off yet.
+Open http://localhost:5173.
 
-## AWS S3 plan
+The frontend environment file points to `http://127.0.0.1:8000/api/v1`, disables mock mode, and sets `VITE_PUBLIC_APP_URL=http://localhost:5173` for local share links. Keep real `.env` files local; do not commit them.
 
-AWS is being introduced for **object storage**, not as a requirement for local development.
+## Use the application
 
-- Create one private S3 bucket for the project when we reach the AWS integration phase.
-- Keep the bucket in the selected AWS Region and block public access.
-- The FastAPI backend will use Boto3 to upload, download, and delete objects.
-- PostgreSQL will store the S3 object key and metadata, not the file contents.
-- Share links will be generated by the backend; for S3 downloads, the backend can issue short-lived presigned URLs after checking the share token and permissions.
-- Use an IAM role for an application deployed on AWS. For local development, use an AWS CLI profile or another supported credential provider. Do not hardcode access keys in source code or commit them to Git.
+1. Open http://localhost:5173 and register a user.
+2. Sign in.
+3. Upload a file from the dashboard.
+4. Refresh the page and verify that the file remains listed.
+5. Download or delete the file.
+6. Create a share link and open it in an incognito window to verify public sharing.
 
-No AWS bucket or credentials are required to run the current FastAPI starter locally. Boto3 will be added to the Python dependencies when the S3 storage implementation begins.
+## API routes
 
-## Run backend checks
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| POST | `/api/v1/auth/register` | Create an account |
+| POST | `/api/v1/auth/login` | Log in and receive a JWT |
+| GET | `/api/v1/auth/me` | Get the authenticated user |
+| POST | `/api/v1/files` | Upload a file (multipart field: `file`) |
+| GET | `/api/v1/files` | List the authenticated user's files |
+| GET | `/api/v1/files/{file_id}/download` | Download an owned file |
+| DELETE | `/api/v1/files/{file_id}` | Delete an owned file |
+| POST | `/api/v1/files/{file_id}/share` | Create a share link |
+| GET | `/api/v1/shares/{token}` | Read shared-file details |
+| GET | `/api/v1/shares/{token}/download` | Download using a valid share link |
 
-From the `backend/` directory with the virtual environment active:
+## Choose the storage backend
+
+### Local storage
+
+This is the default and needs no AWS credentials:
+
+```env
+STORAGE_BACKEND=local
+UPLOAD_DIR=uploads
+```
+
+Files are stored under `backend/uploads/`.
+
+### Amazon S3
+
+The S3 adapter is implemented. To enable it, create a private S3 bucket, configure least-privilege permissions for a dedicated IAM identity, and set these values in `backend/.env`:
+
+```env
+STORAGE_BACKEND=s3
+AWS_REGION=us-east-1
+AWS_S3_BUCKET=YOUR_BUCKET_NAME
+```
+
+Configure a named AWS CLI profile or IAM Identity Center profile, then set `AWS_PROFILE` in the same Git Bash terminal before starting Uvicorn. For AWS-hosted compute, use an IAM role. Never put AWS access keys in `.env` or source code.
+
+Keep S3 Block Public Access enabled. The backend only needs `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on the bucket's object ARN. S3 downloads are streamed through FastAPI after authorization; direct public object access is not used.
+
+**Important:** switching `STORAGE_BACKEND` does not migrate existing files. Existing records continue to use their original storage backend; only new uploads use the selected default.
+
+Follow [docs/aws-s3-setup.md](docs/aws-s3-setup.md) for detailed bucket creation, IAM policy, CLI profile setup and S3 verification steps.
+
+AWS storage, requests and data transfer can incur charges. No AWS account or credentials are needed while using local mode.
+
+## Run checks
+
+Backend (from `backend/` with virtual environment active):
 
 ```bash
 python -m pytest
 python -m ruff check .
 ```
 
-GitHub Actions runs these checks for the Python backend on pushes to the migration branch and for pull requests to `main`.
+Tests use an in-memory SQLite database, a temporary upload directory and a fake S3 client. A real AWS account is not required to run the test suite.
+
+Frontend (from `frontend/`):
+
+```bash
+npm ci
+npm run build
+```
 
 ## Environment variables and secrets
 
-Copy `backend/.env.example` to `backend/.env` for local development. Storage defaults to local mode. The AWS Region and bucket name will be configured when S3 integration begins.
+Copy the templates:
 
-Never commit the real `.env` file, database passwords, JWT secrets, AWS credentials, or service-account files. Only the example environment file should be tracked. AWS workloads should use IAM roles and least-privilege permissions where possible. See the [AWS IAM security best practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html) and [Boto3 credentials guide](https://docs.aws.amazon.com/boto3/latest/guide/credentials.html).
+- `backend/.env.example` → `backend/.env`
+- `frontend/.env.example` → `frontend/.env`
 
-## Development plan
+Never commit real environment files, database passwords, JWT secrets, AWS credentials, or session tokens. Replace the development JWT secret before deployment.
 
-| Step | Work |
-| --- | --- |
-| 1 | Python environment, FastAPI application, and health endpoint |
-| 2 | Connect FastAPI to the existing PostgreSQL database and align the schema with the MVP |
-| 3 | Add the minimum database models needed for users, files, and share links |
-| 4 | Add simple registration/login and file ownership checks |
-| 5 | Implement local upload, list, download, and delete |
-| 6 | Implement share-link creation and protected downloads |
-| 7 | Connect the existing frontend to the real API |
-| 8 | Add an S3 storage implementation using Boto3 and private-bucket access |
-| 9 | Test the complete local and AWS storage flows and document deployment |
+## Roadmap
 
-## Team contribution workflow
+1. Configure and verify the private S3 bucket and IAM profile.
+2. Improve share-link revocation and storage error recovery.
+3. Add stronger upload validation and operational safeguards.
+4. Containerize the complete application and prepare deployment.
 
-- Work on a feature branch rather than directly on `main`.
-- Commit small, related changes with clear messages.
-- Push your branch and open a pull request to `main`.
-- Coordinate API and database changes with the teammates working on the frontend and database.
+## Team workflow
 
-Current migration branch: `feature/python-fastapi-migration`.
+Work on `feature/python-fastapi-migration` or a dedicated feature branch. Keep `main` stable, commit related changes and use pull requests for review.
 
 ## License
 
 This project is for academic and educational purposes.
+
+
+
+## Deploy CloudSync publicly on AWS
+
+The simplest deployment is one EC2 instance running React, FastAPI and PostgreSQL with Docker Compose. The existing private S3 bucket stores uploaded file contents. An Elastic IP gives the server a stable public address, so new share links use the public IP rather than localhost.
+
+Example public share link:
+
+```text
+http://YOUR_ELASTIC_IP/shared/<token>
+```
+
+No CloudFront, RDS, load balancer, domain or separate frontend host is required for this demo.
+
+Follow [infra/aws/README.md](infra/aws/README.md). It covers the one-time IAM permission, SSH key, VPC/subnet selection, CloudFormation stack, server environment file and Docker startup.
+
+**Security:** this first deployment uses HTTP to keep it simple. Use it only for a demo with test data. Do not upload confidential files or reuse passwords until HTTPS is added; HTTP does not encrypt login or file traffic.
+
+**Cost:** a t3.small in us-east-1 plus a public IPv4 address is roughly $19/month before EBS, S3, data transfer and tax. Check AWS pricing and your account's credits/free-tier eligibility before creating the instance. Stop or delete the server when you do not need the public app. Back up PostgreSQL before deleting the CloudFormation stack; the separate S3 bucket and its objects are not deleted by the stack.

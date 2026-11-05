@@ -1,4 +1,4 @@
-export type CloudProvider = 'AZURE' | 'GCP';
+export type CloudProvider = 'LOCAL' | 'AWS_S3' | 'AZURE' | 'GCP';
 
 export type FileType = 'pdf' | 'image' | 'doc' | 'spreadsheet' | 'presentation' | 'code' | 'archive' | 'audio' | 'video' | 'other';
 

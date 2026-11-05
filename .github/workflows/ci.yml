@@ -1,4 +1,4 @@
-name: CloudSync Python CI
+name: CloudSync CI
 
 on:
   push:
@@ -37,3 +37,82 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+  deployment-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate CloudFormation template
+        run: |
+          python -m pip install --upgrade pip
+          pip install cfn-lint
+          cfn-lint infra/aws/cloudformation-ec2-public-ip.yaml
+
+      - name: Validate production Compose configuration
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_PASSWORD=1234567890abcdef1234567890abcdef
+          JWT_SECRET_KEY=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+          AWS_REGION=us-east-1
+          AWS_S3_BUCKET=cloudsync-ci-bucket
+          EOF
+          docker compose -f docker-compose.prod.yml config --quiet
+          rm -f .env
+
+      - name: Build backend container
+        run: docker build -t cloudsync-api:ci ./backend
+
+      - name: Build and smoke-test frontend container
+        run: |
+          docker build -t cloudsync-web:ci \
+            --build-arg VITE_API_BASE_URL=/api/v1 \
+            --build-arg VITE_USE_MOCK_DATA=false \
+            ./frontend
+
+          docker network create cloudsync-smoke
+          docker run -d --name cloudsync-backend-smoke \
+            --network cloudsync-smoke --network-alias backend \
+            nginx:1.27-alpine
+          docker run -d --name cloudsync-web-smoke \
+            --network cloudsync-smoke -p 127.0.0.1:8080:80 \
+            cloudsync-web:ci
+          trap 'docker rm -f cloudsync-web-smoke cloudsync-backend-smoke >/dev/null 2>&1 || true; docker network rm cloudsync-smoke >/dev/null 2>&1 || true' EXIT
+
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          curl -fsS http://127.0.0.1:8080/ >/dev/null

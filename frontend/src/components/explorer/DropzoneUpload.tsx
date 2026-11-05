@@ -1,253 +1,128 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, File, UploadCloud } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { CloudProvider, UploadProgressItem } from '../../types/file';
+import { UploadProgressItem } from '../../types/file';
 import { fileApi } from '../../api/fileApi';
 import { useToast } from '../../hooks/useToast';
-import { UploadCloud, Cloud, Database, CheckCircle2, AlertCircle, File, X } from 'lucide-react';
 import { formatBytes } from '../../utils/formatters';
 
 interface DropzoneUploadProps {
   isOpen: boolean;
   onClose: () => void;
-  folderId?: string | null;
   onUploadComplete: () => void;
 }
 
 export const DropzoneUpload: React.FC<DropzoneUploadProps> = ({
   isOpen,
   onClose,
-  folderId = null,
   onUploadComplete,
 }) => {
-  const [provider, setProvider] = useState<CloudProvider>('AZURE');
   const [uploads, setUploads] = useState<UploadProgressItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
   const handleFiles = async (files: FileList | File[]) => {
-    const fileArray = Array.from(files);
-    if (fileArray.length === 0) return;
+    const selected = Array.from(files);
+    if (!selected.length) return;
 
-    const newUploads: UploadProgressItem[] = fileArray.map((f) => ({
-      id: `up_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      fileName: f.name,
-      fileSize: f.size,
+    const queue = selected.map((file, index) => ({
+      id: `${Date.now()}_${index}_${file.name}`,
+      fileName: file.name,
+      fileSize: file.size,
       progress: 0,
-      status: 'uploading',
-      provider,
+      status: 'uploading' as const,
+      provider: 'LOCAL' as const,
     }));
+    setUploads((current) => [...current, ...queue]);
 
-    setUploads((prev) => [...prev, ...newUploads]);
-
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
-      const uploadItem = newUploads[i];
-
+    let succeeded = 0;
+    for (let index = 0; index < selected.length; index += 1) {
+      const file = selected[index];
+      const item = queue[index];
       try {
-        await fileApi.uploadFile(file, folderId, provider, (percent) => {
-          setUploads((prev) =>
-            prev.map((u) => (u.id === uploadItem.id ? { ...u, progress: percent } : u))
-          );
+        await fileApi.uploadFile(file, null, 'LOCAL', (progress) => {
+          setUploads((current) => current.map((upload) =>
+            upload.id === item.id ? { ...upload, progress } : upload,
+          ));
         });
-
-        setUploads((prev) =>
-          prev.map((u) =>
-            u.id === uploadItem.id ? { ...u, progress: 100, status: 'completed' } : u
-          )
-        );
-        toast.success('Upload Completed', `Uploaded "${file.name}" to ${provider === 'AZURE' ? 'Azure Blob' : 'GCP Storage'}.`);
-      } catch (err: any) {
-        setUploads((prev) =>
-          prev.map((u) =>
-            u.id === uploadItem.id ? { ...u, status: 'error', error: err.message || 'Upload failed' } : u
-          )
-        );
-        toast.error('Upload Failed', `Could not upload "${file.name}".`);
+        succeeded += 1;
+        setUploads((current) => current.map((upload) =>
+          upload.id === item.id ? { ...upload, progress: 100, status: 'completed' } : upload,
+        ));
+      } catch (error) {
+        const message = (error as any)?.response?.data?.detail || (error as Error).message;
+        setUploads((current) => current.map((upload) =>
+          upload.id === item.id ? { ...upload, status: 'error', error: message } : upload,
+        ));
+        toast.error('Upload failed', `${file.name}: ${message}`);
       }
     }
 
-    onUploadComplete();
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files) {
-      handleFiles(e.dataTransfer.files);
+    if (succeeded > 0) {
+      toast.success('Upload complete', `${succeeded} file(s) uploaded successfully.`);
+      onUploadComplete();
     }
   };
 
-  const clearCompleted = () => {
-    setUploads((prev) => prev.filter((u) => u.status === 'uploading'));
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    void handleFiles(event.dataTransfer.files);
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Upload Files to CloudSync"
-      subtitle="Select multi-cloud storage provider & drop your files"
-      maxWidth="lg"
-    >
-      <div className="space-y-5">
-        {/* Provider Selector */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">
-            Target Cloud Storage Provider
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setProvider('AZURE')}
-              className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
-                provider === 'AZURE'
-                  ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-500 text-sky-900 dark:text-sky-100 ring-2 ring-sky-500/20'
-                  : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              <div className="p-2 rounded-lg bg-sky-500 text-white">
-                <Cloud className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-semibold">Microsoft Azure</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Blob Storage Container</p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setProvider('GCP')}
-              className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
-                provider === 'GCP'
-                  ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-indigo-900 dark:text-indigo-100 ring-2 ring-indigo-500/20'
-                  : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              <div className="p-2 rounded-lg bg-indigo-500 text-white">
-                <Database className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-semibold">Google Cloud (GCP)</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Cloud Storage Bucket</p>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Dropzone Area */}
+    <Modal isOpen={isOpen} onClose={onClose} title="Upload files" subtitle="Files are stored in your CloudSync local storage for now." maxWidth="lg">
+      <div className="space-y-4">
         <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
+          onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
-            isDragging
-              ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 scale-[1.01]'
-              : 'border-gray-200 dark:border-gray-700 hover:border-brand-400 bg-gray-50/50 dark:bg-gray-900/40'
-          }`}
+          className={`cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${isDragging ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40' : 'border-gray-300 bg-gray-50 hover:border-brand-400 dark:border-gray-700 dark:bg-gray-900/50'}`}
         >
           <input
+            ref={fileInputRef}
             type="file"
             multiple
-            ref={fileInputRef}
-            onChange={(e) => e.target.files && handleFiles(e.target.files)}
             className="hidden"
+            onChange={(event) => {
+              if (event.target.files) void handleFiles(event.target.files);
+              event.currentTarget.value = '';
+            }}
           />
-
-          <div className="w-14 h-14 mx-auto rounded-full bg-brand-100 dark:bg-brand-950/80 flex items-center justify-center text-brand-600 dark:text-brand-400 mb-3 shadow-inner">
-            <UploadCloud className="w-7 h-7" />
-          </div>
-          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-            Drag & drop your files here, or <span className="text-brand-600 dark:text-brand-400 underline">browse</span>
-          </h4>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Supports PDF, DOCX, XLSX, Images, Videos & ZIP archives up to 1 GB
-          </p>
+          <UploadCloud className="mx-auto h-10 w-10 text-brand-600" />
+          <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">Drop files here or browse</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Maximum file size: 50 MB per file</p>
         </div>
 
-        {/* Live Upload Progress Queue */}
         {uploads.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Upload Queue ({uploads.length})
-              </span>
-              <button
-                type="button"
-                onClick={clearCompleted}
-                className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
-              >
-                Clear Completed
-              </button>
-            </div>
-
-            <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-              {uploads.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl space-y-1.5"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <File className="w-4 h-4 text-brand-500 flex-shrink-0" />
-                      <span className="font-medium text-gray-900 dark:text-white truncate">
-                        {item.fileName}
-                      </span>
-                      <span className="text-gray-400">({formatBytes(item.fileSize)})</span>
-                    </div>
-
-                    {item.status === 'completed' && (
-                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Done
-                      </span>
-                    )}
-
-                    {item.status === 'error' && (
-                      <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
-                        <AlertCircle className="w-3.5 h-3.5" /> Failed
-                      </span>
-                    )}
-
-                    {item.status === 'uploading' && (
-                      <span className="text-brand-600 dark:text-brand-400 font-semibold">
-                        {item.progress}%
-                      </span>
-                    )}
+          <div className="max-h-64 space-y-2 overflow-y-auto">
+            {uploads.map((item) => (
+              <div key={item.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <File className="h-4 w-4 shrink-0 text-brand-600" />
+                    <span className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{item.fileName}</span>
+                    <span className="text-xs text-gray-500">{formatBytes(item.fileSize)}</span>
                   </div>
-
-                  {item.status === 'uploading' && (
-                    <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        style={{ width: `${item.progress}%` }}
-                        className="h-full bg-brand-500 transition-all duration-200"
-                      />
-                    </div>
-                  )}
+                  {item.status === 'completed' && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                  {item.status === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                  {item.status === 'uploading' && <span className="text-xs text-brand-600">{item.progress}%</span>}
                 </div>
-              ))}
-            </div>
+                {item.status === 'uploading' && (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                    <div className="h-full bg-brand-500 transition-all" style={{ width: `${item.progress}%` }} />
+                  </div>
+                )}
+                {item.error && <p className="mt-1 text-xs text-red-500">{item.error}</p>}
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors"
-          >
-            Close
-          </button>
+        <div className="flex justify-end">
+          <button onClick={onClose} className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200">Close</button>
         </div>
       </div>
     </Modal>

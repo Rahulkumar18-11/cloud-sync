@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Simple CloudSync public deployment: one EC2 instance runs React, FastAPI and
+  PostgreSQL with private S3 access. An Elastic IP keeps share URLs stable.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select the VPC containing the public subnet.
+  PublicSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Select a public subnet in the VPC with a route to an Internet Gateway.
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair. Keep its downloaded private .pem file safe.
+  SshAllowedCidr:
+    Type: String
+    AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    Description: Your current public IP with /32, for example 203.0.113.10/32.
+  S3BucketName:
+    Type: String
+    Default: cloudsync-your-unique-suffix
+    Description: Existing private bucket used for CloudSync file objects.
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.small
+      - t3.medium
+    Description: t3.small is a low-cost starting size with 2 GiB RAM.
+  GitRepositoryUrl:
+    Type: String
+    Default: https://github.com/Rahulkumar18-11/cloud-sync.git
+  GitBranch:
+    Type: String
+    Default: feature/python-fastapi-migration
+
+Resources:
+  CloudSyncSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public CloudSync web app and restricted SSH administration.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: Public CloudSync website and API through Nginx
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - Description: SSH administration from the developer's current public IP only
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SshAllowedCidr
+      SecurityGroupEgress:
+        - Description: Outbound access for GitHub, package installation and AWS APIs
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: cloudsync-app-sg
+
+  CloudSyncEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudsync-ec2-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudSyncS3ObjectAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${S3BucketName}/*
+      Tags:
+        - Key: Name
+          Value: cloudsync-ec2-role
+
+  CloudSyncInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref CloudSyncEC2Role
+
+  CloudSyncInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}"
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref CloudSyncInstanceProfile
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref CloudSyncSecurityGroup
+          SubnetId: !Ref PublicSubnetId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 24
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf update -y
+          dnf install -y docker git curl openssl
+          systemctl enable --now docker
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          # Add swap to make the frontend production build safer on a 2 GiB instance.
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+          mkdir -p /opt/cloudsync
+          git clone --depth 1 --branch ${GitBranch} ${GitRepositoryUrl} /opt/cloudsync
+          chown -R ec2-user:ec2-user /opt/cloudsync
+          echo "CloudSync source is ready in /opt/cloudsync. Add the private .env file before starting Docker Compose." > /opt/cloudsync/DEPLOYMENT-READY.txt
+          chown ec2-user:ec2-user /opt/cloudsync/DEPLOYMENT-READY.txt
+      Tags:
+        - Key: Name
+          Value: cloudsync-app-server
+        - Key: Project
+          Value: CloudSync
+
+  CloudSyncElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: cloudsync-public-ip
+
+  CloudSyncElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref CloudSyncInstance
+      AllocationId: !GetAtt CloudSyncElasticIp.AllocationId
+
+Outputs:
+  PublicApplicationUrl:
+    Description: Public CloudSync URL. Share links use this host.
+    Value: !Sub http://${CloudSyncElasticIp}
+  PublicIPv4:
+    Description: Stable Elastic IP address for the CloudSync server.
+    Value: !Ref CloudSyncElasticIp
+  EC2InstanceId:
+    Description: EC2 instance ID.
+    Value: !Ref CloudSyncInstance
+  S3Bucket:
+    Description: Existing private S3 bucket.
+    Value: !Ref S3BucketName

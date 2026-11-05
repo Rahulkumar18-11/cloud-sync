@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloudsync-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cloudsync
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the server .env file}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cloudsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - cloudsync-internal
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cloudsync-api
+    restart: unless-stopped
+    environment:
+      APP_NAME: CloudSync API
+      APP_ENV: production
+      API_V1_PREFIX: /api/v1
+      CORS_ORIGINS: ""
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@postgres:5432/cloudsync
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in the server .env file}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      STORAGE_BACKEND: s3
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_SIZE_MB: 50
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:?Set AWS_S3_BUCKET in the server .env file}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cloudsync-internal
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_USE_MOCK_DATA: "false"
+        VITE_PUBLIC_APP_URL: ""
+    container_name: cloudsync-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cloudsync-internal
+
+volumes:
+  postgres_data:
+
+networks:
+  cloudsync-internal:
+    driver: bridge

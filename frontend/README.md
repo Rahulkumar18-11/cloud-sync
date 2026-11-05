@@ -1,146 +1,97 @@
 # CloudSync Frontend
 
-CloudSync is a modern, secure, multi-cloud file storage and management web application built with **React**, **TypeScript**, **Tailwind CSS**, and **React Router v6**. It provides a single centralized interface for managing, organizing, sharing, and versioning files across **Microsoft Azure Blob Storage** and **Google Cloud Storage (GCP)**.
+The CloudSync frontend is built with React, TypeScript, Vite and Tailwind CSS. It is connected to the Python FastAPI MVP in the repository root.
 
----
+## Current frontend features
 
-## Technical Stack
+- Account registration and login
+- JWT-backed session validation
+- File dashboard with search and grid/list views
+- Multi-file upload with progress display
+- File download and deletion
+- Share-link generation with 7-day, 30-day or no-expiry options
+- Public shared-file page and download
+- Storage badge reflects whether a file is stored locally or in Amazon S3
+- Light/dark theme
 
-- **Framework**: React 19 + Vite
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS v4 + Custom Utilities
-- **Icons**: Lucide React
-- **Routing**: React Router 7
-- **HTTP Client**: Axios (with custom interceptors & JWT injection)
-- **State Management**: React Context (`AuthContext`, `ThemeContext`, `ToastContext`)
+Folders, file renaming, file versions, admin tools, activity logs and profile/quota screens are not part of the current connected MVP.
 
----
+## Stack
 
-## Folder Structure
+- React 19 + Vite
+- TypeScript
+- Tailwind CSS
+- React Router
+- Axios
+- Lucide React icons
+- React Context for authentication, theme and toast messages
 
-```
-frontend/
-├── src/
-│   ├── api/                  # Typed Axios client & service modules with Spring Boot REST contracts
-│   │   ├── axiosInstance.ts  # Axios client with JWT request header & 401 interceptor
-│   │   ├── authApi.ts        # /api/auth endpoints (login, register, me)
-│   │   ├── fileApi.ts        # /api/files endpoints (upload, download, delete, rename, move, versions)
-│   │   ├── folderApi.ts      # /api/folders endpoints (create, delete, breadcrumbs)
-│   │   ├── shareApi.ts       # /api/shares endpoints (create link, get shared file, revoke)
-│   │   ├── userApi.ts        # /api/user endpoints (profile, password, storage quota)
-│   │   └── adminApi.ts       # /api/admin endpoints (users, storage stats, cloud config toggle)
-│   │
-│   ├── components/           # Reusable UI component modules
-│   │   ├── common/           # Shared UI widgets (Toast, Modal, FileIcon, CloudBadge, StorageMeter)
-│   │   ├── layout/           # App Layout, Sidebar, Navbar, ProtectedRoute, AdminRoute
-│   │   ├── explorer/         # File explorer (Grid/List views, Breadcrumbs, Drag & Drop upload, Modals)
-│   │   ├── file/             # Version history modal & Secure share link modal
-│   │   ├── activity/         # Activity audit list & action badges
-│   │   └── admin/            # Admin user table, storage allocation chart, cloud provider switch
-│   │
-│   ├── context/              # Global state providers (AuthContext, ThemeContext, ToastContext)
-│   ├── hooks/                # Custom React hooks (useAuth, useTheme, useToast, useDebounce)
-│   ├── mock/                 # Interactive mock data dataset for local testing
-│   ├── types/                # TypeScript interfaces (Auth, File, Folder, Activity, User, Admin)
-│   ├── utils/                # Helper utilities (formatBytes, formatDate, formatRelativeTime)
-│   ├── pages/                # Route-level view pages
-│   │   ├── LoginPage.tsx
-│   │   ├── RegisterPage.tsx
-│   │   ├── DashboardPage.tsx
-│   │   ├── SharedFileViewPage.tsx
-│   │   ├── ProfilePage.tsx
-│   │   ├── ActivityPage.tsx
-│   │   ├── AdminPanelPage.tsx
-│   │   └── NotFoundPage.tsx
-│   ├── App.tsx               # Root App router & context wrapper
-│   ├── index.css             # Tailwind imports & scrollbar styles
-│   └── main.tsx              # Vite DOM root entry
-├── .env                      # Local environment configuration
-├── .env.example              # Environment variables template
-├── index.html                # HTML entry point with Google Fonts
-├── package.json              # Project dependencies & scripts
-└── tailwind.config.js        # Tailwind CSS configuration with dark mode support
-```
+## Run locally (Windows Git Bash)
 
----
+Start PostgreSQL and the FastAPI backend first. The backend should be available at `http://127.0.0.1:8000`.
 
-## Setup & Running Locally
-
-### 1. Prerequisite
-Ensure Node.js (v18+) and `npm` are installed on your machine.
-
-### 2. Installation
-Navigate into the `frontend/` directory and install project dependencies:
+From the repository root, open a second Git Bash terminal:
 
 ```bash
 cd frontend
-npm install
-```
-
-### 3. Environment Configuration
-Copy `.env.example` to `.env`:
-
-```env
-VITE_API_BASE_URL=http://localhost:8080/api
-VITE_USE_MOCK_DATA=true
-```
-
-- **`VITE_API_BASE_URL`**: Base URL of your Spring Boot REST API.
-- **`VITE_USE_MOCK_DATA`**: Set to `true` for out-of-the-box local interactive testing with simulated latency and mock files. Set to `false` when connecting to your live Spring Boot backend.
-
-### 4. Start Development Server
-
-```bash
+cp .env.example .env
+npm ci
 npm run dev
 ```
 
-The application will launch at `http://localhost:5173`.
+Open http://localhost:5173.
 
----
+The tracked `.env.example` contains:
 
-## Demo Login Credentials (Mock Mode)
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
+VITE_USE_MOCK_DATA=false
+VITE_PUBLIC_APP_URL=http://localhost:5173
+```
 
-When `VITE_USE_MOCK_DATA=true`, you can click the quick demo login buttons on the login page:
+- `VITE_API_BASE_URL` is the FastAPI base URL and must include `/api/v1`.
+- `VITE_PUBLIC_APP_URL` is the base URL placed in generated share links.
+- In local development, `http://localhost:5173` is expected. It works only on the developer's computer.
+- For a public deployment, set `VITE_PUBLIC_APP_URL` to the public frontend HTTPS URL and `VITE_API_BASE_URL` to the public FastAPI HTTPS URL ending in `/api/v1`. Rebuild/restart Vite after changing Vite environment variables.
 
-- **Standard User**:
-  - Email: `user@cloudsync.io`
-  - Access: File Explorer, Upload, Share, Versioning, Activity History, Profile
+Do not commit the local `.env` file.
 
-- **Admin User**:
-  - Email: `admin@cloudsync.io`
-  - Access: Full access + Admin Dashboard (`/admin`), User Account Control, Multi-Cloud Storage Allocation Chart, Global Cloud Provider Switch (Azure <-> GCP)
+## How sharing works
 
----
+A share link points to the CloudSync frontend's shared-file page, for example:
 
-## Spring Boot REST API Endpoint Specifications
+```text
+https://cloudsync.example.com/shared/<share-token>
+```
 
-All API service files in `src/api/` include explicit comment blocks and typed Axios methods matching standard REST conventions:
+The React page asks FastAPI to validate the token and its expiry. When the recipient downloads, FastAPI retrieves the file from its recorded storage backend (local disk or private S3) and streams it to the browser.
 
-| Service | Method | REST Endpoint | Description |
-| :--- | :--- | :--- | :--- |
-| **Auth** | `POST` | `/api/auth/login` | Authenticate user & return JWT token |
-| **Auth** | `POST` | `/api/auth/register` | Register new user account |
-| **Auth** | `GET` | `/api/auth/me` | Get currently authenticated user profile |
-| **Files** | `GET` | `/api/files` | List files (query params: `folderId`, `search`, `fileType`, `provider`) |
-| **Files** | `POST` | `/api/files/upload` | Multipart file upload (`file`, `folderId`, `provider`) |
-| **Files** | `GET` | `/api/files/:id/download` | Download raw file binary or presigned URL |
-| **Files** | `DELETE` | `/api/files/:id` | Delete file & cloud blob |
-| **Files** | `PUT` | `/api/files/:id/rename` | Rename file |
-| **Files** | `PUT` | `/api/files/:id/move` | Move file to target folder |
-| **Files** | `GET` | `/api/files/:id/versions` | List version history for file |
-| **Files** | `POST` | `/api/files/:id/versions/:vId/restore` | Restore specified file version |
-| **Folders** | `GET` | `/api/folders` | List folders by parentId |
-| **Folders** | `POST` | `/api/folders` | Create new folder |
-| **Folders** | `DELETE` | `/api/folders/:id` | Delete folder & nested contents |
-| **Folders** | `GET` | `/api/folders/:id/breadcrumbs` | Get folder hierarchy trail |
-| **Sharing** | `POST` | `/api/shares` | Generate share link with permission & expiry |
-| **Sharing** | `GET` | `/api/shares/:token` | Public shared file details |
-| **User** | `GET` | `/api/user/profile` | Get user profile details |
-| **User** | `PUT` | `/api/user/profile` | Update profile info |
-| **User** | `PUT` | `/api/user/password` | Change account password |
-| **User** | `GET` | `/api/user/storage` | Fetch user storage quota metrics |
-| **Admin** | `GET` | `/api/admin/users` | List all user accounts |
-| **Admin** | `PUT` | `/api/admin/users/:id/status` | Enable/disable user access |
-| **Admin** | `DELETE` | `/api/admin/users/:id` | Delete user account |
-| **Admin** | `GET` | `/api/admin/storage/stats` | System-wide multi-cloud metrics |
-| **Admin** | `PUT` | `/api/admin/cloud-config` | Toggle primary provider (Azure / GCP) |
+The link is not an S3 URL. Keeping the bucket private means recipients do not get direct public bucket access. A localhost link is not internet-accessible; to share with other people, deploy the frontend and backend to public HTTPS addresses or expose both through correctly configured temporary HTTPS tunnels.
+
+## Connected API operations
+
+| Method | Endpoint | Frontend use |
+| --- | --- | --- |
+| POST | `/api/v1/auth/register` | Create account; the UI then signs the user in |
+| POST | `/api/v1/auth/login` | Authenticate and store JWT |
+| GET | `/api/v1/auth/me` | Validate the current session |
+| POST | `/api/v1/files` | Upload a file using multipart form data |
+| GET | `/api/v1/files` | List the current user's files |
+| GET | `/api/v1/files/{file_id}/download` | Download an owned file |
+| DELETE | `/api/v1/files/{file_id}` | Delete an owned file |
+| POST | `/api/v1/files/{file_id}/share` | Generate a share link |
+| GET | `/api/v1/shares/{token}` | Load public shared-file details, including storage backend |
+| GET | `/api/v1/shares/{token}/download` | Download through a valid share token |
+
+## Build
+
+```bash
+npm ci
+npm run build
+```
+
+The root GitHub Actions workflow also builds the frontend and runs the Python backend tests and lint checks.
+
+## Storage
+
+The frontend sends uploads to FastAPI. The backend stores new files in the configured local or S3 backend. The frontend continues to use the same API contract in either mode; it does not connect directly to S3.
